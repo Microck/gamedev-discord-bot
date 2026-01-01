@@ -52,9 +52,9 @@ python -m bot.main
 organize your game dev discord with zero effort.
 
 - **auto channels:** creates 25+ organized channels per game from a template.
-- **smart acronyms:** "Steal a Brainrot" → SaB, "The Great Escape" → TGE.
-- **role sync:** members with @Coder auto-get @SaB-Coder for every game.
-- **emoji groups:** channels prefixed by category (💻-sab-code-frontend).
+- **smart acronyms:** "Neon Drift" → ND, "The Great Escape" → TGE.
+- **role sync:** members with @Coder auto-get @ND-Coder for every game.
+- **emoji groups:** channels prefixed by category (💻-nd-code-frontend).
 - **channel descriptions:** each channel has a topic explaining its purpose.
 - **colored roles:** each game gets a unique color for its roles.
 - **live templates:** modify template, sync to all existing games instantly.
@@ -86,41 +86,41 @@ available roles: `Coder`, `Artist`, `Audio`, `Writer`, `QA`
 #### 2. create a game
 
 ```
-/newgame "Steal a Brainrot"
+/newgame "Neon Drift"
 ```
 
 creates:
 
 ```
-📁 Steal a Brainrot
-├── 💬-sab-announcements    (Project updates, milestones, and important news)
-├── 💬-sab-general          (Casual chat and general discussion)
-├── 💬-sab-brainstorming    (Ideas, concepts, and feature proposals)
-├── 💬-sab-tasks            (Task assignments, todos, and progress tracking)
-├── 💻-sab-code-frontend    (UI, menus, HUD, and client-side code)
-├── 💻-sab-code-backend     (Server, database, and backend systems)
-├── 💻-sab-code-gamelogic   (Game mechanics, physics, and core systems)
-├── 💻-sab-code-networking  (Multiplayer, netcode, and online features)
-├── 💻-sab-code-bugs        (Bug reports, debugging, and issue tracking)
-├── 🎨-sab-design-gui       (UI/UX design, menus, and interface mockups)
-├── 🎨-sab-design-3d        (3D models, textures, and environments)
-├── 🎨-sab-design-2d        (Sprites, textures, icons, and 2D artwork)
-├── 🎨-sab-design-animation (Character animations, rigging, and motion)
-├── 🎨-sab-design-vfx       (Particles, shaders, and visual effects)
-├── 🎨-sab-design-concept   (Concept art, sketches, and visual ideas)
-├── 🔊-sab-audio-music      (Soundtrack, themes, and background music)
-├── 🔊-sab-audio-sfx        (Sound effects, foley, and audio design)
-├── ✍️-sab-writing-story    (Narrative, lore, worldbuilding, and plot)
-├── ✍️-sab-writing-dialogue (Character dialogue and voice lines)
-├── ✍️-sab-writing-copy     (Marketing copy, descriptions, and text)
-├── 🧪-sab-qa-playtesting   (Playtest sessions, builds, and test plans)
-├── 🧪-sab-qa-feedback      (Tester feedback, reviews, and suggestions)
-├── 📚-sab-resources-refs   (Reference images, inspiration, and research)
-├── 📚-sab-resources-tools  (Tools, tutorials, and helpful resources)
-└── 🎙️-sab-voice            (Voice chat for team calls)
+📁 Neon Drift
+├── 💬-nd-announcements    (Project updates, milestones, and important news)
+├── 💬-nd-general          (Casual chat and general discussion)
+├── 💬-nd-brainstorming    (Ideas, concepts, and feature proposals)
+├── 💬-nd-tasks            (Task assignments, todos, and progress tracking)
+├── 💻-nd-code-frontend    (UI, menus, HUD, and client-side code)
+├── 💻-nd-code-backend     (Server, database, and backend systems)
+├── 💻-nd-code-gamelogic   (Game mechanics, physics, and core systems)
+├── 💻-nd-code-networking  (Multiplayer, netcode, and online features)
+├── 💻-nd-code-bugs        (Bug reports, debugging, and issue tracking)
+├── 🎨-nd-design-gui       (UI/UX design, menus, and interface mockups)
+├── 🎨-nd-design-3d        (3D models, textures, and environments)
+├── 🎨-nd-design-2d        (Sprites, textures, icons, and 2D artwork)
+├── 🎨-nd-design-animation (Character animations, rigging, and motion)
+├── 🎨-nd-design-vfx       (Particles, shaders, and visual effects)
+├── 🎨-nd-design-concept   (Concept art, sketches, and visual ideas)
+├── 🔊-nd-audio-music      (Soundtrack, themes, and background music)
+├── 🔊-nd-audio-sfx        (Sound effects, foley, and audio design)
+├── ✍️-nd-writing-story    (Narrative, lore, worldbuilding, and plot)
+├── ✍️-nd-writing-dialogue (Character dialogue and voice lines)
+├── ✍️-nd-writing-copy     (Marketing copy, descriptions, and text)
+├── 🧪-nd-qa-playtesting   (Playtest sessions, builds, and test plans)
+├── 🧪-nd-qa-feedback      (Tester feedback, reviews, and suggestions)
+├── 📚-nd-resources-refs   (Reference images, inspiration, and research)
+├── 📚-nd-resources-tools  (Tools, tutorials, and helpful resources)
+└── 🎙️-nd-voice            (Voice chat for team calls)
 ```
 
-roles created: `@SaB-Coder`, `@SaB-Artist`, `@SaB-Audio`, `@SaB-Writer`, `@SaB-QA` (all same color)
+roles created: `@ND-Coder`, `@ND-Artist`, `@ND-Audio`, `@ND-Writer`, `@ND-QA` (all same color)
 
 #### 3. manage template
 
@@ -134,8 +134,8 @@ roles created: `@SaB-Coder`, `@SaB-Artist`, `@SaB-Audio`, `@SaB-Writer`, `@SaB-Q
 #### 4. per-game customization
 
 ```
-/game addchannel SaB marketing general  → add custom channel
-/game removechannel SaB code-networking → remove channel
+/game addchannel ND marketing general   → add custom channel
+/game removechannel ND code-networking  → remove channel
 /game list                              → list all games
 ```
 
@@ -208,7 +208,7 @@ enable **Server Members Intent** in discord developer portal. bot role must be a
 move bot role higher in server role list. administrator permission recommended.
 
 **acronym conflicts**
-if "SaB" exists, new game auto-becomes "SaB2". or specify custom: `/newgame "Name" acronym:XYZ`
+if "ND" exists, new game auto-becomes "ND2". or specify custom: `/newgame "Name" acronym:XYZ`
 
 ---
 
