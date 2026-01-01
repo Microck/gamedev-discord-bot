@@ -528,12 +528,12 @@ class GamesCog(commands.Cog):
     
     @app_commands.command(name="thuglife", description="Thug life")
     async def thuglife(self, interaction: discord.Interaction):
-        await interaction.response.send_message("https://tenor.com/view/thug-life-gif-25350966")
+        gif_path = Path(__file__).parent.parent.parent / "assets" / "thuglife.gif"
+        await interaction.response.send_message(file=discord.File(gif_path))
     
     @app_commands.command(name="dodolife", description="Dodo life")
     async def dodolife(self, interaction: discord.Interaction):
-        gif_path = Path(__file__).parent.parent.parent / "giphy (2).gif"
-        await interaction.response.send_message(file=discord.File(gif_path))
+        await interaction.response.send_message("https://tenor.com/view/thug-life-gif-25350966")
 
 
 async def setup(bot: commands.Bot):
