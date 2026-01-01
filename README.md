@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://img.icons8.com/fluency/96/controller.png" alt="logo" width="96"/>
+  <img src="https://kagi.com/proxy/tupac_shakur_photo_by_steve_eichner_archive_photos_getty_83928439.jpg?c=CO4LUKZbRFWAMar9Ouxd47EwU47WPl3o3nzqn97mCtVTrK_dM-bW2xJeWDX7J9obDzYE8LRsBLJ_zgE6S3ksG8H-ZMnDuNoYFnZm7tmVT6YDpYOhRzduw_5kxe1iqmWP-EVNRXTwmDUFPr7olXA9ZUtgwR4Z9KC_h4qsNddNw8I%3D" alt="logo" width="96"/>
 </p>
 
 <h1 align="center">tupac</h1>
