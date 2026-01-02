@@ -21,6 +21,9 @@ All notable changes to this project will be documented in this file.
   - `/task setup <game> [channel]` - configure task board channel
   - Creates header + 4 status columns
   - Auto-updates when tasks change status
+- **Task Management Commands**
+  - `/task delete <id>` - delete task, thread, and header message
+  - `/task manage <game>` - list all tasks by status with IDs for deletion
 - **Database**
   - `header_message_id` field for tracking channel embed
   - `update_task_assignee`, `update_task_priority` functions

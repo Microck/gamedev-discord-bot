@@ -150,6 +150,8 @@ roles created: `@ND-Coder`, `@ND-Artist`, `@ND-Audio`, `@ND-Writer`, `@ND-QA` (a
 /task setup <game> [channel]  -> set up task board in channel
 /task board <game>            -> show/refresh task dashboard
 /task list [user]             -> list active tasks
+/task manage <game>           -> list all tasks with IDs (for deletion)
+/task delete <id>             -> delete a task
 /task import <file>           -> bulk import from JSON/XML
 /task help                    -> show detailed help
 ```
@@ -215,6 +217,8 @@ roles created: `@ND-Coder`, `@ND-Artist`, `@ND-Audio`, `@ND-Writer`, `@ND-QA` (a
 | `/task setup` | set up task board channel |
 | `/task board` | show/refresh task dashboard |
 | `/task list` | list active tasks |
+| `/task manage` | list all tasks with IDs |
+| `/task delete` | delete a task by ID |
 | `/task import` | bulk import tasks from file |
 | `/task help` | show task system help |
 | `/debug list-channels` | list channels with IDs |
