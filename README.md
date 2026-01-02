@@ -184,12 +184,17 @@ roles created: `@ND-Coder`, `@ND-Artist`, `@ND-Audio`, `@ND-Writer`, `@ND-QA` (a
 - check-ins for stagnant tasks (no update 3+ days)
 - thread moderation (only assignee/leads can post)
 
+
 #### 6. discovery commands (for imports)
 
 ```
 /debug list-channels [category_id]  -> get channel IDs
 /debug list-members [role]          -> get member IDs
 ```
+
+
+![screenshot649_23-33-02-01-2026](https://github.com/user-attachments/assets/cac35ff9-9ec2-4ef5-9f46-d5213ca4ad48)
+![screenshot647_23-32-02-01-2026](https://github.com/user-attachments/assets/f2c43dce-36ef-4260-9048-65246733c30b)
 
 ---
 
