@@ -148,6 +148,18 @@ async def get_groups_dict() -> dict:
     return {g.name: g.emoji for g in groups}
 
 
+async def upsert_group(name: str, emoji: str) -> bool:
+    """Insert or update a group."""
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        await db.execute(
+            """INSERT INTO groups (name, emoji) VALUES (?, ?)
+               ON CONFLICT(name) DO UPDATE SET emoji = excluded.emoji""",
+            (name, emoji)
+        )
+        await db.commit()
+        return True
+
+
 # ============== TEMPLATE CHANNELS ==============
 
 async def get_all_template_channels() -> List[TemplateChannel]:
@@ -188,6 +200,30 @@ async def remove_template_channel(name: str) -> bool:
         )
         await db.commit()
         return cursor.rowcount > 0
+
+
+async def clear_template_channels() -> int:
+    """Delete all template channels. Returns count deleted."""
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        cursor = await db.execute("DELETE FROM template_channels")
+        await db.commit()
+        return cursor.rowcount
+
+
+async def upsert_template_channel(name: str, group_name: str, is_voice: bool = False, description: str = None) -> bool:
+    """Insert or update a template channel."""
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        await db.execute(
+            """INSERT INTO template_channels (name, group_name, is_voice, description) 
+               VALUES (?, ?, ?, ?)
+               ON CONFLICT(name) DO UPDATE SET 
+               group_name = excluded.group_name,
+               is_voice = excluded.is_voice,
+               description = excluded.description""",
+            (name, group_name, is_voice, description)
+        )
+        await db.commit()
+        return True
 
 
 async def get_template_channel(name: str) -> Optional[TemplateChannel]:

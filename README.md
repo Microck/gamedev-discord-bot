@@ -131,6 +131,8 @@ roles created: `@ND-Coder`, `@ND-Artist`, `@ND-Audio`, `@ND-Writer`, `@ND-QA` (a
 /template add <name> <group> [desc]     -> add channel to template
 /template remove <name>                 -> remove from template
 /template sync                          -> sync changes to all games
+/template export                        -> download template as JSON
+/template import <file> [mode]          -> import template from JSON (merge/replace)
 ```
 
 #### 4. per-game customization
@@ -194,6 +196,8 @@ roles created: `@ND-Coder`, `@ND-Artist`, `@ND-Audio`, `@ND-Writer`, `@ND-QA` (a
 | `/template add` | add channel to template |
 | `/template remove` | remove from template |
 | `/template sync` | sync template to all games |
+| `/template export` | download template as JSON |
+| `/template import` | import template from JSON |
 | `/group list` | list groups and emojis |
 | `/group emoji` | change a group's emoji |
 | `/task create` | create task with thread |
@@ -236,6 +240,37 @@ roles created: `@ND-Coder`, `@ND-Artist`, `@ND-Audio`, `@ND-Writer`, `@ND-QA` (a
 ```
 
 use `/debug list-channels` and `/debug list-members` to get IDs.
+
+---
+
+### template import/export format
+
+```json
+{
+  "groups": [
+    {"name": "general", "emoji": "..."},
+    {"name": "code", "emoji": "..."}
+  ],
+  "channels": [
+    {
+      "name": "announcements",
+      "group": "general",
+      "is_voice": false,
+      "description": "Project updates"
+    },
+    {
+      "name": "voice",
+      "group": "voice",
+      "is_voice": true,
+      "description": null
+    }
+  ]
+}
+```
+
+import modes:
+- `merge` (default): add new entries, update existing
+- `replace`: clear template, import fresh
 
 ---
 

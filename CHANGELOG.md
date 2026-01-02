@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-01-02
+
+### Added
+- **Template Import/Export**
+  - `/template export` - Download template as JSON file
+  - `/template import` - Import template from JSON file
+  - Merge mode: add/update entries without removing existing
+  - Replace mode: clear template and import fresh
+
 ## [1.1.0] - 2026-01-02
 
 ### Added

@@ -1,6 +1,8 @@
 import discord
 from discord import app_commands
 from discord.ext import commands
+import json
+import io
 
 from ..database import (
     get_all_template_channels,
@@ -10,12 +12,15 @@ from ..database import (
     get_all_groups,
     get_group,
     update_group_emoji,
+    upsert_group,
     get_all_games,
     get_game_channels,
     get_non_custom_game_channels,
     add_game_channel,
     remove_game_channel as db_remove_game_channel,
     get_groups_dict,
+    clear_template_channels,
+    upsert_template_channel,
 )
 from ..utils import format_channel_name
 
@@ -190,6 +195,114 @@ class TemplatesCog(commands.Cog):
             result += f"\n\nErrors:\n" + "\n".join(errors[:10])
             if len(errors) > 10:
                 result += f"\n... and {len(errors) - 10} more errors"
+        
+        await interaction.followup.send(result)
+    
+    @template_group.command(name="export", description="Export template to JSON file")
+    @app_commands.checks.has_permissions(administrator=True)
+    async def template_export(self, interaction: discord.Interaction):
+        channels = await get_all_template_channels()
+        groups = await get_all_groups()
+        
+        export_data = {
+            "groups": [
+                {"name": g.name, "emoji": g.emoji}
+                for g in groups
+            ],
+            "channels": [
+                {
+                    "name": ch.name,
+                    "group": ch.group_name,
+                    "is_voice": ch.is_voice,
+                    "description": ch.description
+                }
+                for ch in channels
+            ]
+        }
+        
+        json_str = json.dumps(export_data, indent=2, ensure_ascii=False)
+        file = discord.File(
+            io.BytesIO(json_str.encode('utf-8')),
+            filename="template.json"
+        )
+        
+        await interaction.response.send_message(
+            f"Template exported: {len(groups)} groups, {len(channels)} channels",
+            file=file
+        )
+    
+    @template_group.command(name="import", description="Import template from JSON file")
+    @app_commands.describe(
+        file="JSON file with template data",
+        mode="merge: add/update entries, replace: clear and import fresh"
+    )
+    @app_commands.choices(mode=[
+        app_commands.Choice(name="merge", value="merge"),
+        app_commands.Choice(name="replace", value="replace"),
+    ])
+    @app_commands.checks.has_permissions(administrator=True)
+    async def template_import(
+        self,
+        interaction: discord.Interaction,
+        file: discord.Attachment,
+        mode: str = "merge"
+    ):
+        if not file.filename.endswith('.json'):
+            await interaction.response.send_message("File must be .json")
+            return
+        
+        await interaction.response.defer()
+        
+        try:
+            content = await file.read()
+            data = json.loads(content.decode('utf-8'))
+        except json.JSONDecodeError as e:
+            await interaction.followup.send(f"Invalid JSON: {e}")
+            return
+        
+        groups_imported = 0
+        channels_imported = 0
+        errors = []
+        
+        # Clear existing if replace mode
+        if mode == "replace":
+            await clear_template_channels()
+        
+        # Import groups
+        if "groups" in data:
+            for g in data["groups"]:
+                try:
+                    name = g.get("name")
+                    emoji = g.get("emoji", "")
+                    if name:
+                        await upsert_group(name, emoji)
+                        groups_imported += 1
+                except Exception as e:
+                    errors.append(f"Group {g}: {e}")
+        
+        # Import channels
+        if "channels" in data:
+            for ch in data["channels"]:
+                try:
+                    name = ch.get("name")
+                    group = ch.get("group")
+                    if not name or not group:
+                        errors.append(f"Channel missing name or group: {ch}")
+                        continue
+                    
+                    is_voice = ch.get("is_voice", False)
+                    description = ch.get("description")
+                    
+                    await upsert_template_channel(name, group, is_voice, description)
+                    channels_imported += 1
+                except Exception as e:
+                    errors.append(f"Channel {ch}: {e}")
+        
+        result = f"Import complete ({mode} mode).\nGroups: {groups_imported}\nChannels: {channels_imported}"
+        if errors:
+            result += f"\n\nErrors ({len(errors)}):\n" + "\n".join(errors[:10])
+            if len(errors) > 10:
+                result += f"\n... and {len(errors) - 10} more"
         
         await interaction.followup.send(result)
     
