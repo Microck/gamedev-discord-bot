@@ -17,6 +17,7 @@ class GameDevBot(commands.Bot):
         await init_db()
         await self.load_extension("bot.cogs.templates")
         await self.load_extension("bot.cogs.games")
+        await self.load_extension("bot.cogs.tasks")
         
         # Sync commands to guild
         if GUILD_ID:

@@ -2,7 +2,7 @@ import aiosqlite
 from typing import List, Optional, Set
 
 from .config import DATABASE_PATH, DEFAULT_GROUPS, DEFAULT_TEMPLATE
-from .models import Game, Group, TemplateChannel, GameChannel, GameRole
+from .models import Game, Group, TemplateChannel, GameChannel, GameRole, Task, TaskHistory, TaskBoard
 
 
 async def init_db():
@@ -50,6 +50,42 @@ async def init_db():
                 role_id INTEGER NOT NULL,
                 suffix TEXT NOT NULL,
                 FOREIGN KEY (game_id) REFERENCES games(id) ON DELETE CASCADE
+            );
+
+            -- Task management tables
+            CREATE TABLE IF NOT EXISTS tasks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                game_acronym TEXT NOT NULL,
+                title TEXT NOT NULL,
+                description TEXT,
+                assignee_id INTEGER NOT NULL,
+                target_channel_id INTEGER NOT NULL,
+                thread_id INTEGER,
+                control_message_id INTEGER,
+                status TEXT DEFAULT 'todo',
+                deadline DATETIME,
+                eta TEXT,
+                priority TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS task_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                task_id INTEGER NOT NULL,
+                user_id INTEGER NOT NULL,
+                action TEXT NOT NULL,
+                old_value TEXT,
+                new_value TEXT,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(task_id) REFERENCES tasks(id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS task_boards (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                game_acronym TEXT NOT NULL UNIQUE,
+                channel_id INTEGER NOT NULL,
+                message_ids TEXT NOT NULL
             );
         """)
         
@@ -406,3 +442,391 @@ async def get_all_game_roles() -> List[GameRole]:
             )
             for r in rows
         ]
+
+
+# ============== TASKS ==============
+
+async def create_task(
+    game_acronym: str,
+    title: str,
+    description: str,
+    assignee_id: int,
+    target_channel_id: int,
+    deadline: str = None,
+    priority: str = None
+) -> Task:
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        cursor = await db.execute(
+            """INSERT INTO tasks 
+               (game_acronym, title, description, assignee_id, target_channel_id, deadline, priority)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (game_acronym, title, description, assignee_id, target_channel_id, deadline, priority)
+        )
+        await db.commit()
+        return Task(
+            id=cursor.lastrowid,
+            game_acronym=game_acronym,
+            title=title,
+            description=description,
+            assignee_id=assignee_id,
+            target_channel_id=target_channel_id,
+            thread_id=None,
+            control_message_id=None,
+            status='todo',
+            deadline=deadline,
+            eta=None,
+            priority=priority
+        )
+
+
+async def get_task(task_id: int) -> Optional[Task]:
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute("SELECT * FROM tasks WHERE id = ?", (task_id,))
+        row = await cursor.fetchone()
+        if row:
+            return Task(
+                id=row["id"],
+                game_acronym=row["game_acronym"],
+                title=row["title"],
+                description=row["description"],
+                assignee_id=row["assignee_id"],
+                target_channel_id=row["target_channel_id"],
+                thread_id=row["thread_id"],
+                control_message_id=row["control_message_id"],
+                status=row["status"],
+                deadline=row["deadline"],
+                eta=row["eta"],
+                priority=row["priority"],
+                created_at=row["created_at"],
+                updated_at=row["updated_at"]
+            )
+        return None
+
+
+async def get_task_by_thread_id(thread_id: int) -> Optional[Task]:
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute("SELECT * FROM tasks WHERE thread_id = ?", (thread_id,))
+        row = await cursor.fetchone()
+        if row:
+            return Task(
+                id=row["id"],
+                game_acronym=row["game_acronym"],
+                title=row["title"],
+                description=row["description"],
+                assignee_id=row["assignee_id"],
+                target_channel_id=row["target_channel_id"],
+                thread_id=row["thread_id"],
+                control_message_id=row["control_message_id"],
+                status=row["status"],
+                deadline=row["deadline"],
+                eta=row["eta"],
+                priority=row["priority"],
+                created_at=row["created_at"],
+                updated_at=row["updated_at"]
+            )
+        return None
+
+
+async def get_tasks_by_game(game_acronym: str) -> List[Task]:
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            "SELECT * FROM tasks WHERE game_acronym = ? ORDER BY created_at DESC",
+            (game_acronym,)
+        )
+        rows = await cursor.fetchall()
+        return [
+            Task(
+                id=r["id"],
+                game_acronym=r["game_acronym"],
+                title=r["title"],
+                description=r["description"],
+                assignee_id=r["assignee_id"],
+                target_channel_id=r["target_channel_id"],
+                thread_id=r["thread_id"],
+                control_message_id=r["control_message_id"],
+                status=r["status"],
+                deadline=r["deadline"],
+                eta=r["eta"],
+                priority=r["priority"],
+                created_at=r["created_at"],
+                updated_at=r["updated_at"]
+            )
+            for r in rows
+        ]
+
+
+async def get_tasks_by_assignee(assignee_id: int) -> List[Task]:
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            "SELECT * FROM tasks WHERE assignee_id = ? AND status != 'done' ORDER BY deadline ASC",
+            (assignee_id,)
+        )
+        rows = await cursor.fetchall()
+        return [
+            Task(
+                id=r["id"],
+                game_acronym=r["game_acronym"],
+                title=r["title"],
+                description=r["description"],
+                assignee_id=r["assignee_id"],
+                target_channel_id=r["target_channel_id"],
+                thread_id=r["thread_id"],
+                control_message_id=r["control_message_id"],
+                status=r["status"],
+                deadline=r["deadline"],
+                eta=r["eta"],
+                priority=r["priority"],
+                created_at=r["created_at"],
+                updated_at=r["updated_at"]
+            )
+            for r in rows
+        ]
+
+
+async def get_tasks_by_status(status: str, game_acronym: str = None) -> List[Task]:
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        if game_acronym:
+            cursor = await db.execute(
+                "SELECT * FROM tasks WHERE status = ? AND game_acronym = ? ORDER BY created_at DESC",
+                (status, game_acronym)
+            )
+        else:
+            cursor = await db.execute(
+                "SELECT * FROM tasks WHERE status = ? ORDER BY created_at DESC",
+                (status,)
+            )
+        rows = await cursor.fetchall()
+        return [
+            Task(
+                id=r["id"],
+                game_acronym=r["game_acronym"],
+                title=r["title"],
+                description=r["description"],
+                assignee_id=r["assignee_id"],
+                target_channel_id=r["target_channel_id"],
+                thread_id=r["thread_id"],
+                control_message_id=r["control_message_id"],
+                status=r["status"],
+                deadline=r["deadline"],
+                eta=r["eta"],
+                priority=r["priority"],
+                created_at=r["created_at"],
+                updated_at=r["updated_at"]
+            )
+            for r in rows
+        ]
+
+
+async def get_overdue_tasks() -> List[Task]:
+    """Get tasks past deadline that are not done."""
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            """SELECT * FROM tasks 
+               WHERE status != 'done' 
+               AND deadline IS NOT NULL 
+               AND deadline < datetime('now')
+               ORDER BY deadline ASC"""
+        )
+        rows = await cursor.fetchall()
+        return [
+            Task(
+                id=r["id"],
+                game_acronym=r["game_acronym"],
+                title=r["title"],
+                description=r["description"],
+                assignee_id=r["assignee_id"],
+                target_channel_id=r["target_channel_id"],
+                thread_id=r["thread_id"],
+                control_message_id=r["control_message_id"],
+                status=r["status"],
+                deadline=r["deadline"],
+                eta=r["eta"],
+                priority=r["priority"],
+                created_at=r["created_at"],
+                updated_at=r["updated_at"]
+            )
+            for r in rows
+        ]
+
+
+async def get_tasks_due_soon(hours: int = 24) -> List[Task]:
+    """Get tasks due within the next N hours."""
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            f"""SELECT * FROM tasks 
+               WHERE status != 'done' 
+               AND deadline IS NOT NULL 
+               AND deadline > datetime('now')
+               AND deadline <= datetime('now', '+{hours} hours')
+               ORDER BY deadline ASC"""
+        )
+        rows = await cursor.fetchall()
+        return [
+            Task(
+                id=r["id"],
+                game_acronym=r["game_acronym"],
+                title=r["title"],
+                description=r["description"],
+                assignee_id=r["assignee_id"],
+                target_channel_id=r["target_channel_id"],
+                thread_id=r["thread_id"],
+                control_message_id=r["control_message_id"],
+                status=r["status"],
+                deadline=r["deadline"],
+                eta=r["eta"],
+                priority=r["priority"],
+                created_at=r["created_at"],
+                updated_at=r["updated_at"]
+            )
+            for r in rows
+        ]
+
+
+async def get_stagnant_tasks(days: int = 3) -> List[Task]:
+    """Get in-progress tasks not updated in N days."""
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            f"""SELECT * FROM tasks 
+               WHERE status = 'progress' 
+               AND updated_at < datetime('now', '-{days} days')
+               ORDER BY updated_at ASC"""
+        )
+        rows = await cursor.fetchall()
+        return [
+            Task(
+                id=r["id"],
+                game_acronym=r["game_acronym"],
+                title=r["title"],
+                description=r["description"],
+                assignee_id=r["assignee_id"],
+                target_channel_id=r["target_channel_id"],
+                thread_id=r["thread_id"],
+                control_message_id=r["control_message_id"],
+                status=r["status"],
+                deadline=r["deadline"],
+                eta=r["eta"],
+                priority=r["priority"],
+                created_at=r["created_at"],
+                updated_at=r["updated_at"]
+            )
+            for r in rows
+        ]
+
+
+async def update_task_thread(task_id: int, thread_id: int, control_message_id: int) -> bool:
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        cursor = await db.execute(
+            """UPDATE tasks SET thread_id = ?, control_message_id = ?, updated_at = CURRENT_TIMESTAMP 
+               WHERE id = ?""",
+            (thread_id, control_message_id, task_id)
+        )
+        await db.commit()
+        return cursor.rowcount > 0
+
+
+async def update_task_status(task_id: int, status: str) -> bool:
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        cursor = await db.execute(
+            "UPDATE tasks SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (status, task_id)
+        )
+        await db.commit()
+        return cursor.rowcount > 0
+
+
+async def update_task_eta(task_id: int, eta: str) -> bool:
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        cursor = await db.execute(
+            "UPDATE tasks SET eta = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (eta, task_id)
+        )
+        await db.commit()
+        return cursor.rowcount > 0
+
+
+async def delete_task(task_id: int) -> bool:
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        cursor = await db.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
+        await db.commit()
+        return cursor.rowcount > 0
+
+
+# ============== TASK HISTORY ==============
+
+async def add_task_history(task_id: int, user_id: int, action: str, old_value: str = None, new_value: str = None):
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        await db.execute(
+            """INSERT INTO task_history (task_id, user_id, action, old_value, new_value)
+               VALUES (?, ?, ?, ?, ?)""",
+            (task_id, user_id, action, old_value, new_value)
+        )
+        await db.commit()
+
+
+async def get_task_history(task_id: int) -> List[TaskHistory]:
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            "SELECT * FROM task_history WHERE task_id = ? ORDER BY timestamp DESC",
+            (task_id,)
+        )
+        rows = await cursor.fetchall()
+        return [
+            TaskHistory(
+                id=r["id"],
+                task_id=r["task_id"],
+                user_id=r["user_id"],
+                action=r["action"],
+                old_value=r["old_value"],
+                new_value=r["new_value"],
+                timestamp=r["timestamp"]
+            )
+            for r in rows
+        ]
+
+
+# ============== TASK BOARDS ==============
+
+async def get_task_board(game_acronym: str) -> Optional[TaskBoard]:
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            "SELECT * FROM task_boards WHERE game_acronym = ?",
+            (game_acronym,)
+        )
+        row = await cursor.fetchone()
+        if row:
+            return TaskBoard(
+                id=row["id"],
+                game_acronym=row["game_acronym"],
+                channel_id=row["channel_id"],
+                message_ids=row["message_ids"]
+            )
+        return None
+
+
+async def upsert_task_board(game_acronym: str, channel_id: int, message_ids: str) -> TaskBoard:
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        await db.execute(
+            """INSERT INTO task_boards (game_acronym, channel_id, message_ids)
+               VALUES (?, ?, ?)
+               ON CONFLICT(game_acronym) DO UPDATE SET
+               channel_id = excluded.channel_id,
+               message_ids = excluded.message_ids""",
+            (game_acronym, channel_id, message_ids)
+        )
+        await db.commit()
+        return TaskBoard(
+            id=None,
+            game_acronym=game_acronym,
+            channel_id=channel_id,
+            message_ids=message_ids
+        )

@@ -45,3 +45,40 @@ class GameRole:
     game_id: int
     role_id: int
     suffix: str  # e.g., "-Coder"
+
+
+@dataclass
+class Task:
+    id: Optional[int]
+    game_acronym: str
+    title: str
+    description: Optional[str]
+    assignee_id: int
+    target_channel_id: int
+    thread_id: Optional[int]
+    control_message_id: Optional[int]  # The embed message ID in the thread
+    status: str  # todo, progress, review, done
+    deadline: Optional[datetime]
+    eta: Optional[str]
+    priority: Optional[str]
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+
+@dataclass
+class TaskHistory:
+    id: Optional[int]
+    task_id: int
+    user_id: int
+    action: str  # status_change, eta_update, etc.
+    old_value: Optional[str]
+    new_value: Optional[str]
+    timestamp: Optional[datetime] = None
+
+
+@dataclass
+class TaskBoard:
+    id: Optional[int]
+    game_acronym: str
+    channel_id: int
+    message_ids: str  # JSON array of message IDs for the embeds
