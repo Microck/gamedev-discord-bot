@@ -156,6 +156,11 @@ class HeaderView(discord.ui.View):
         super().__init__(timeout=None)
         self.task_id = task_id
         self.cog = cog
+        
+        # Update custom_ids to include task_id for persistence
+        for item in self.children:
+            if hasattr(item, 'custom_id') and item.custom_id:
+                item.custom_id = f"{item.custom_id}:{task_id}"
 
     async def check_lead(self, interaction: discord.Interaction) -> bool:
         if interaction.user.guild_permissions.administrator:
@@ -298,6 +303,11 @@ class TaskView(discord.ui.View):
         super().__init__(timeout=None)
         self.task_id = task_id
         self.cog = cog
+        
+        # Update custom_ids to include task_id for persistence
+        for item in self.children:
+            if hasattr(item, 'custom_id') and item.custom_id:
+                item.custom_id = f"{item.custom_id}:{task_id}"
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         task = await get_task(self.task_id)
