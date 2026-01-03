@@ -1319,6 +1319,13 @@ class TasksCog(commands.Cog):
         try:
             if file.filename.endswith('.json'):
                 tasks_data = json.loads(content)
+                # Handle double-encoded JSON (string containing JSON)
+                if isinstance(tasks_data, str):
+                    tasks_data = json.loads(tasks_data)
+                # Validate it's a list
+                if not isinstance(tasks_data, list):
+                    await interaction.followup.send("JSON must be an array of task objects")
+                    return
             else:
                 root = ET.fromstring(content)
                 for task_elem in root.findall('task'):
