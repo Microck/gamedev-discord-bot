@@ -13,7 +13,12 @@ from ..database import (
     migrate_tasks_to_multi_assignee,
     get_all_tasks,
     get_task_assignees,
+    get_all_games,
+    get_non_custom_game_channels,
+    get_groups_dict,
+    add_game_channel,
 )
+from ..utils import format_channel_name
 
 
 DEFAULT_CONFIG = {
@@ -160,6 +165,110 @@ class SetupLandingView(discord.ui.View):
 
     @discord.ui.button(label="Quick Setup", style=discord.ButtonStyle.success, emoji="⚡")
     async def quick_setup(self, interaction: discord.Interaction, button: discord.ui.Button):
+        embed = discord.Embed(
+            title="⚡ Quick Setup - Channel Mode",
+            description=(
+                "**🎮 Per-Game** (Recommended)\n"
+                "Adds `task-board`, `task-questions`, `task-leads` to the channel template "
+                "and syncs them to all existing games.\n\n"
+                "**🌐 Global**\n"
+                "Creates a single `Tasks` category with shared channels for all games."
+            ),
+            color=discord.Color.blue()
+        )
+        view = QuickSetupModeView(self.guild_id, self.existing_config)
+        await interaction.response.edit_message(embed=embed, view=view)
+        self.stop()
+
+    @discord.ui.button(label="Custom Setup", style=discord.ButtonStyle.primary, emoji="⚙️")
+    async def custom_setup(self, interaction: discord.Interaction, button: discord.ui.Button):
+        view = SetupWizardView(self.guild_id, self.existing_config)
+        await view.start(interaction)
+        self.stop()
+
+
+class QuickSetupModeView(discord.ui.View):
+    def __init__(self, guild_id: int, existing_config: dict = None):
+        super().__init__(timeout=300)
+        self.guild_id = guild_id
+        self.existing_config = existing_config
+
+    @discord.ui.button(label="Per-Game", style=discord.ButtonStyle.primary, emoji="🎮")
+    async def per_game_mode(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer(ephemeral=True)
+
+        await upsert_template_channel("task-board", "general", False, "Task management dashboard")
+        await upsert_template_channel("task-questions", "general", False, "Questions about tasks")
+        await upsert_template_channel("task-leads", "general", False, "Lead notifications")
+
+        games = await get_all_games()
+        added_count = 0
+        errors = []
+
+        if games:
+            template_channels = await get_all_template_channels()
+            task_templates = [ch for ch in template_channels if ch.name in ("task-board", "task-questions", "task-leads")]
+            groups = await get_groups_dict()
+
+            for game in games:
+                category = interaction.guild.get_channel(game.category_id)
+                if not category:
+                    errors.append(f"Category not found for {game.name}")
+                    continue
+
+                game_channels = await get_non_custom_game_channels(game.id)
+                game_channel_names = {ch.name for ch in game_channels}
+
+                for template_ch in task_templates:
+                    if template_ch.name not in game_channel_names:
+                        emoji = groups.get(template_ch.group_name, "")
+                        channel_name = format_channel_name(emoji, game.acronym, template_ch.name)
+
+                        try:
+                            new_channel = await category.create_text_channel(
+                                name=channel_name,
+                                topic=template_ch.description
+                            )
+                            await add_game_channel(
+                                game_id=game.id,
+                                channel_id=new_channel.id,
+                                name=template_ch.name,
+                                group_name=template_ch.group_name,
+                                is_custom=False,
+                                is_voice=False
+                            )
+                            added_count += 1
+                        except discord.HTTPException as e:
+                            errors.append(f"Failed to create {channel_name}: {e}")
+
+        config = self.existing_config.copy() if self.existing_config else DEFAULT_CONFIG.copy()
+        config['channel_mode'] = 'per_game'
+        config['board_channel_template'] = 'task-board'
+        config['questions_channel_template'] = 'task-questions'
+        config['leads_channel_template'] = 'task-leads'
+
+        sync_msg = f"Added {added_count} channels to {len(games)} game(s)." if games else "No existing games to sync."
+        if errors:
+            sync_msg += f"\n⚠️ {len(errors)} error(s)"
+
+        embed = discord.Embed(
+            title="⚡ Template Channels Created!",
+            description=(
+                f"Added to template: `task-board`, `task-questions`, `task-leads`\n\n"
+                f"**Sync results:** {sync_msg}\n\n"
+                "Now let's configure lead roles and approval settings..."
+            ),
+            color=discord.Color.green()
+        )
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
+        view = SetupWizardView(self.guild_id, config)
+        view.step = 4
+        await view.start_from_step(interaction)
+        self.stop()
+
+    @discord.ui.button(label="Global", style=discord.ButtonStyle.secondary, emoji="🌐")
+    async def global_mode(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer(ephemeral=True)
 
         guild = interaction.guild
@@ -202,12 +311,6 @@ class SetupLandingView(discord.ui.View):
         view = SetupWizardView(self.guild_id, config)
         view.step = 4
         await view.start_from_step(interaction)
-        self.stop()
-
-    @discord.ui.button(label="Custom Setup", style=discord.ButtonStyle.primary, emoji="⚙️")
-    async def custom_setup(self, interaction: discord.Interaction, button: discord.ui.Button):
-        view = SetupWizardView(self.guild_id, self.existing_config)
-        await view.start(interaction)
         self.stop()
 
 

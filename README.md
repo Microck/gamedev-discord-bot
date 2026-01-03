@@ -168,9 +168,13 @@ members with base roles auto-get game roles (e.g., @Coder gets @ND-Coder)
 /admin migrate  -> sync existing tasks to multi-assignee
 ```
 
-**Quick Setup** - auto-creates `Tasks` category with `task-board`, `task-questions`, `task-leads` channels, then configures lead roles and approval mode.
+**Quick Setup** - choose channel mode first:
+- **Per-Game**: adds `task-board`, `task-questions`, `task-leads` to the template and syncs to all existing games
+- **Global**: creates a single `Tasks` category with shared channels
 
-**Custom Setup** - full wizard to choose channel mode (per-game vs global), select existing channels or create new ones, configure lead roles and approval mode.
+Then configure lead roles and approval mode.
+
+**Custom Setup** - full wizard with step-by-step configuration for all options.
 
 ---
 
