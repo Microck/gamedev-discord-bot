@@ -26,15 +26,22 @@ Python Discord bot (`discord.py` + `aiosqlite`). Manages projects via auto-gener
 | `/project` | projects.py | new, delete, list, addchannel, removechannel, member, members |
 | `/template` | templates.py | list, add, remove, sync, export, import, groups, emoji |
 | `/task` | tasks.py | new, close, list, board, delete, import, help |
-| `/admin` | setup.py | setup, status, migrate, channels, members |
+| `/admin` | setup.py | setup, status, sync, migrate, channels, members |
 
 ## KEY TABLES
 | Table | Purpose |
 |-------|---------|
 | `projects` | Project records (name, acronym, category_id) |
+| `project_channels` | Channels belonging to projects |
+| `project_roles` | Roles belonging to projects |
 | `tasks` | Task records (title, status, deadlines) |
 | `task_assignees` | Multi-assignee (user_id, is_primary, has_approved) |
 | `server_config` | Per-server setup (approval rules, lead roles) |
+
+## KEY FEATURES
+- Question modal: assignees ask questions, leads reply to thread
+- Leads channel permissions: auto-restricted during template sync
+- Admin sync: imports existing Discord categories as projects
 
 ## CONVENTIONS
 - Raw SQL in `database.py`, no ORM

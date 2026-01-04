@@ -54,7 +54,10 @@ python -m bot.main
 - **live templates:** modify template, sync to all existing projects instantly
 - **task management:** trello-style task tracking with threads, dashboards, automation
 - **multi-assignee:** assign multiple people to tasks with configurable approval rules
+- **question system:** assignees ask questions via modal, leads reply directly to thread
+- **leads-only channels:** task-leads channels auto-restricted to configured lead roles
 - **setup wizard:** interactive `/admin setup` to configure task system
+- **project import:** `/admin sync` imports existing Discord categories as projects
 
 ---
 
@@ -88,6 +91,7 @@ all commands organized into 4 groups:
 | | `/task help` | show detailed help |
 | **admin** | `/admin setup` | configure task system (wizard) |
 | | `/admin status` | show current config |
+| | `/admin sync` | import existing categories as projects |
 | | `/admin migrate` | migrate tasks to multi-assignee |
 | | `/admin channels` | list channels with IDs |
 | | `/admin members` | list members with IDs |
@@ -107,7 +111,18 @@ creates:
 - project-specific roles: `@ND-Coder`, `@ND-Artist`, `@ND-Audio`, `@ND-Writer`, `@ND-QA`
 - channels prefixed with acronym: `nd-general`, `nd-code-frontend`, etc.
 
-#### 2. manage members
+#### 2. import existing projects
+
+```
+/admin sync
+```
+
+- discovers Discord categories not yet tracked
+- auto-detects acronyms from channel naming patterns
+- imports channels and matches existing roles
+- multi-select for batch import
+
+#### 3. manage members
 
 ```
 /project member add @user Coder   -> assign role
@@ -119,7 +134,7 @@ available roles: `Coder`, `Artist`, `Audio`, `Writer`, `QA`
 
 members with base roles auto-get project roles (e.g., @Coder gets @ND-Coder)
 
-#### 3. manage templates
+#### 4. manage templates
 
 ```
 /template list                  -> view current template
@@ -130,7 +145,9 @@ members with base roles auto-get project roles (e.g., @Coder gets @ND-Coder)
 /template import <file>         -> import from JSON
 ```
 
-#### 4. create tasks
+**note:** channels with "lead" in the name are auto-restricted to configured lead roles during sync.
+
+#### 5. create tasks
 
 ```
 /task new <title> <description> <channel> <assignee> [priority] [deadline]
@@ -140,7 +157,7 @@ members with base roles auto-get project roles (e.g., @Coder gets @ND-Coder)
 - supports multiple assignees via `additional_assignees` parameter
 - first assignee becomes primary owner (can close solo)
 
-#### 5. task workflow
+#### 6. task workflow
 
 1. admin creates task -> thread spawned in target channel
 2. assignee clicks `Start` -> status becomes "In Progress"
@@ -156,11 +173,20 @@ members with base roles auto-get project roles (e.g., @Coder gets @ND-Coder)
 **thread buttons (in task thread):**
 - `Start/Pause` - toggle work status
 - `Update ETA` - set estimated completion
-- `Question` - ping leads for help
+- `Question` - open modal to ask leads (they can reply directly to thread)
 - `Submit for Review` - request approval
 - `Approve & Close` - complete task
 
-#### 6. server setup
+#### 7. question flow
+
+1. assignee clicks `Question` button in task thread
+2. modal opens to type the question
+3. question posted to project's leads channel with task context
+4. leads see `Reply` button on the question
+5. lead clicks `Reply`, types response in modal
+6. response posted directly to task thread, @mentioning the asker
+
+#### 8. server setup
 
 ```
 /admin setup    -> choose Quick Setup or Custom Setup
@@ -290,6 +316,8 @@ tupac/
 **acronym conflicts** - if "ND" exists, new project becomes "ND2", or specify custom: `/project new "Name" acronym:XYZ`
 
 **task threads not working** - bot needs "Create Public Threads" and "Send Messages in Threads" permissions
+
+**leads channel not restricted** - run `/admin setup` first to configure lead roles, then `/template sync`
 
 ---
 
