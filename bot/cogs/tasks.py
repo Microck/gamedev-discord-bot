@@ -1276,8 +1276,8 @@ class TasksCog(commands.Cog):
             except (json.JSONDecodeError, discord.HTTPException):
                 pass
 
-        # Get tasks for this game
-        tasks = await get_tasks_by_project(game)
+        # Get tasks for this project
+        tasks = await get_tasks_by_project(project)
 
         # Group by status
         by_status = {
@@ -1292,8 +1292,8 @@ class TasksCog(commands.Cog):
 
         # Create header embed
         header_embed = discord.Embed(
-            title=f"\U0001f4cb Task Board: {game_obj.name}",
-            description=f"All tasks for **{game_obj.name}** ({game_obj.acronym})\nUpdates automatically when task status changes.",
+            title=f"\U0001f4cb Task Board: {project_obj.name}",
+            description=f"All tasks for **{project_obj.name}** ({project_obj.acronym})\nUpdates automatically when task status changes.",
             color=discord.Color.blue()
         )
         await target_channel.send(embed=header_embed)
@@ -1577,7 +1577,7 @@ class TasksCog(commands.Cog):
 
         # Create embed with all tasks
         embed = discord.Embed(
-            title=f"Task Management: {game_obj.name}",
+            title=f"Task Management: {project_obj.name}",
             description="Use `/task delete <id>` to remove a task.",
             color=discord.Color.blue()
         )
@@ -1709,7 +1709,7 @@ class TasksCog(commands.Cog):
 
                 # Create task
                 task = await create_task(
-                    game_acronym=game_acronym,
+                    project_acronym=game_acronym,
                     title=td['title'],
                     description=td.get('description', ''),
                     assignee_id=assignee_id,
@@ -1757,7 +1757,7 @@ class TasksCog(commands.Cog):
                 # Update task object and refresh header with thread link
                 task.thread_id = thread.id
                 task.header_message_id = header_msg.id
-                header_embed = self.create_header_embed(task, member, project_name)
+                header_embed = self.create_header_embed(task, member, game_name)
                 await header_msg.edit(embed=header_embed, view=header_view)
 
                 # Notify assignee
