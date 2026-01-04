@@ -1073,20 +1073,20 @@ class TasksCog(commands.Cog):
 
     # ============== TASK BOARD ==============
 
-    @task_group.command(name="board", description="Show or refresh the task board for a game")
+    @task_group.command(name="board", description="Show or refresh the task board for a project")
     @app_commands.describe(
-        game="Game acronym",
+        project="Project acronym",
         refresh="Force refresh the board"
     )
-    async def task_board(self, interaction: discord.Interaction, game: str, refresh: bool = False):
+    async def task_board(self, interaction: discord.Interaction, project: str, refresh: bool = False):
         await interaction.response.defer()
 
-        game_obj = await get_project_by_acronym(game)
-        if not game_obj:
-            await interaction.followup.send(f"Game `{game}` not found.")
+        project_obj = await get_project_by_acronym(project)
+        if not project_obj:
+            await interaction.followup.send(f"Project `{project}` not found.")
             return
 
-        tasks = await get_tasks_by_project(game)
+        tasks = await get_tasks_by_project(project)
 
         # Group by status
         by_status = {
@@ -1121,7 +1121,7 @@ class TasksCog(commands.Cog):
             embeds.append(embed)
 
         # Check if board exists
-        existing_board = await get_task_board(game)
+        existing_board = await get_task_board(project)
         
         if existing_board and not refresh:
             # Try to edit existing messages
@@ -1144,33 +1144,33 @@ class TasksCog(commands.Cog):
             msg = await interaction.channel.send(embed=embed)
             msg_ids.append(msg.id)
 
-        await upsert_task_board(game, interaction.channel.id, json.dumps(msg_ids))
+        await upsert_task_board(project, interaction.channel.id, json.dumps(msg_ids))
         await interaction.followup.send("Task board created!")
 
     @task_group.command(name="setup", description="Set up a task board channel for a game")
     @app_commands.describe(
-        game="Game acronym",
+        project="Project acronym",
         channel="Channel to use as the task board (current channel if not specified)"
     )
     @app_commands.checks.has_permissions(administrator=True)
     async def task_setup(
         self,
         interaction: discord.Interaction,
-        game: str,
+        project: str,
         channel: discord.TextChannel = None
     ):
-        """Set up or update the task board channel for a game."""
+        """Set up or update the task board channel for a project."""
         await interaction.response.defer()
 
-        game_obj = await get_project_by_acronym(game)
-        if not game_obj:
-            await interaction.followup.send(f"Game `{game}` not found.")
+        project_obj = await get_project_by_acronym(project)
+        if not project_obj:
+            await interaction.followup.send(f"Project `{project}` not found.")
             return
 
         target_channel = channel or interaction.channel
 
         # Check if board already exists
-        existing_board = await get_task_board(game)
+        existing_board = await get_task_board(project)
         if existing_board:
             # Delete old board messages if possible
             try:
@@ -1232,12 +1232,12 @@ class TasksCog(commands.Cog):
             msg = await target_channel.send(embed=embed)
             msg_ids.append(msg.id)
 
-        await upsert_task_board(game, target_channel.id, json.dumps(msg_ids))
+        await upsert_task_board(project, target_channel.id, json.dumps(msg_ids))
         await interaction.followup.send(f"Task board set up in {target_channel.mention}!")
 
-    async def update_dashboard(self, game_acronym: str, bot: commands.Bot):
-        """Update the dashboard for a game."""
-        board = await get_task_board(game_acronym)
+    async def update_dashboard(self, project_acronym: str, bot: commands.Bot):
+        """Update the dashboard for a project."""
+        board = await get_task_board(project_acronym)
         if not board:
             return
 
@@ -1249,7 +1249,7 @@ class TasksCog(commands.Cog):
         if not channel:
             return
 
-        tasks = await get_tasks_by_project(game_acronym)
+        tasks = await get_tasks_by_project(project_acronym)
 
         # Group by status
         by_status = {
@@ -1763,9 +1763,9 @@ class TasksCog(commands.Cog):
             except discord.HTTPException:
                 pass
 
-    @task_new.autocomplete("game")
-    @task_board.autocomplete("game")
-    @task_setup.autocomplete("game")
+    @task_new.autocomplete("project")
+    @task_board.autocomplete("project")
+    @task_setup.autocomplete("project")
     async def project_autocomplete(self, interaction: discord.Interaction, current: str):
         projects = await get_all_projects()
         return [

@@ -8,6 +8,73 @@ from .models import Project, Group, TemplateChannel, ProjectChannel, ProjectRole
 async def init_db():
     """Initialize database schema and seed default data."""
     async with aiosqlite.connect(DATABASE_PATH) as db:
+        # MIGRATION: Rename games -> projects (must run BEFORE CREATE TABLE)
+        cursor = await db.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='games'")
+        if await cursor.fetchone():
+            cursor2 = await db.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='projects'")
+            if await cursor2.fetchone():
+                await db.execute("DROP TABLE IF EXISTS games")
+                await db.execute("DROP TABLE IF EXISTS game_channels")
+                await db.execute("DROP TABLE IF EXISTS game_roles")
+            else:
+                await db.execute("ALTER TABLE games RENAME TO projects")
+                await db.execute("ALTER TABLE game_channels RENAME TO project_channels")
+                await db.execute("ALTER TABLE game_roles RENAME TO project_roles")
+            
+            cursor = await db.execute("PRAGMA table_info(tasks)")
+            columns = [row[1] for row in await cursor.fetchall()]
+            if 'game_acronym' in columns:
+                await db.execute("""
+                    CREATE TABLE tasks_new (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        project_acronym TEXT NOT NULL,
+                        title TEXT NOT NULL,
+                        description TEXT,
+                        assignee_id INTEGER NOT NULL,
+                        target_channel_id INTEGER NOT NULL,
+                        thread_id INTEGER,
+                        control_message_id INTEGER,
+                        header_message_id INTEGER,
+                        status TEXT DEFAULT 'todo',
+                        deadline DATETIME,
+                        eta TEXT,
+                        priority TEXT,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+                await db.execute("""
+                    INSERT INTO tasks_new (id, project_acronym, title, description, assignee_id, 
+                        target_channel_id, thread_id, control_message_id, header_message_id,
+                        status, deadline, eta, priority, created_at, updated_at)
+                    SELECT id, game_acronym, title, description, assignee_id,
+                        target_channel_id, thread_id, control_message_id, header_message_id,
+                        status, deadline, eta, priority, created_at, updated_at
+                    FROM tasks
+                """)
+                await db.execute("DROP TABLE tasks")
+                await db.execute("ALTER TABLE tasks_new RENAME TO tasks")
+            
+            cursor = await db.execute("PRAGMA table_info(task_boards)")
+            columns = [row[1] for row in await cursor.fetchall()]
+            if 'game_acronym' in columns:
+                await db.execute("""
+                    CREATE TABLE task_boards_new (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        project_acronym TEXT NOT NULL UNIQUE,
+                        channel_id INTEGER NOT NULL,
+                        message_ids TEXT NOT NULL
+                    )
+                """)
+                await db.execute("""
+                    INSERT INTO task_boards_new (id, project_acronym, channel_id, message_ids)
+                    SELECT id, game_acronym, channel_id, message_ids FROM task_boards
+                """)
+                await db.execute("DROP TABLE task_boards")
+                await db.execute("ALTER TABLE task_boards_new RENAME TO task_boards")
+            
+            await db.commit()
+        
         # Create tables
         await db.executescript("""
             CREATE TABLE IF NOT EXISTS projects (
@@ -127,64 +194,6 @@ async def init_db():
             CREATE INDEX IF NOT EXISTS idx_task_assignees_user_id 
             ON task_assignees(user_id)
         """)
-        
-        cursor = await db.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='games'")
-        if await cursor.fetchone():
-            await db.execute("ALTER TABLE games RENAME TO projects")
-            await db.execute("ALTER TABLE game_channels RENAME TO project_channels")
-            await db.execute("ALTER TABLE game_roles RENAME TO project_roles")
-            
-            cursor = await db.execute("PRAGMA table_info(tasks)")
-            columns = [row[1] for row in await cursor.fetchall()]
-            if 'game_acronym' in columns:
-                await db.execute("""
-                    CREATE TABLE tasks_new (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        project_acronym TEXT NOT NULL,
-                        title TEXT NOT NULL,
-                        description TEXT,
-                        assignee_id INTEGER NOT NULL,
-                        target_channel_id INTEGER NOT NULL,
-                        thread_id INTEGER,
-                        control_message_id INTEGER,
-                        header_message_id INTEGER,
-                        status TEXT DEFAULT 'todo',
-                        deadline DATETIME,
-                        eta TEXT,
-                        priority TEXT,
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                    )
-                """)
-                await db.execute("""
-                    INSERT INTO tasks_new (id, project_acronym, title, description, assignee_id, 
-                        target_channel_id, thread_id, control_message_id, header_message_id,
-                        status, deadline, eta, priority, created_at, updated_at)
-                    SELECT id, game_acronym, title, description, assignee_id,
-                        target_channel_id, thread_id, control_message_id, header_message_id,
-                        status, deadline, eta, priority, created_at, updated_at
-                    FROM tasks
-                """)
-                await db.execute("DROP TABLE tasks")
-                await db.execute("ALTER TABLE tasks_new RENAME TO tasks")
-            
-            cursor = await db.execute("PRAGMA table_info(task_boards)")
-            columns = [row[1] for row in await cursor.fetchall()]
-            if 'game_acronym' in columns:
-                await db.execute("""
-                    CREATE TABLE task_boards_new (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        project_acronym TEXT NOT NULL UNIQUE,
-                        channel_id INTEGER NOT NULL,
-                        message_ids TEXT NOT NULL
-                    )
-                """)
-                await db.execute("""
-                    INSERT INTO task_boards_new (id, project_acronym, channel_id, message_ids)
-                    SELECT id, game_acronym, channel_id, message_ids FROM task_boards
-                """)
-                await db.execute("DROP TABLE task_boards")
-                await db.execute("ALTER TABLE task_boards_new RENAME TO task_boards")
         
         # Seed default groups if empty
         cursor = await db.execute("SELECT COUNT(*) FROM groups")
