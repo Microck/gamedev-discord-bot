@@ -464,9 +464,18 @@ class LeadReplyModal(discord.ui.Modal, title='Reply to Question'):
         self.cog = cog
 
     async def on_submit(self, interaction: discord.Interaction):
-        thread = interaction.guild.get_channel(self.thread_id)
+        task = await get_task(self.task_id)
+        thread_id = task.thread_id if task else self.thread_id
+        
+        thread = interaction.guild.get_channel(thread_id)
         if not thread:
-            await interaction.response.send_message("Thread no longer exists.", ephemeral=True)
+            try:
+                thread = await interaction.guild.fetch_channel(thread_id)
+            except discord.NotFound:
+                pass
+        
+        if not thread:
+            await interaction.response.send_message("Thread no longer exists. The task may have been deleted.", ephemeral=True)
             return
 
         embed = discord.Embed(
@@ -523,9 +532,9 @@ class ETAModal(discord.ui.Modal, title='Update ETA'):
         await update_task_eta(self.task_id, str(self.eta_input))
         await add_task_history(self.task_id, interaction.user.id, 'eta_update', old_eta, str(self.eta_input))
 
-        # Update control panel
         task.eta = str(self.eta_input)
         await self.cog.update_control_panel(interaction, task)
+        await self.cog.update_header_message(interaction, task)
         await interaction.response.send_message(f"ETA updated to: {self.eta_input}", ephemeral=True)
 
 
