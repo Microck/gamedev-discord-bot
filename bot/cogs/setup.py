@@ -2,6 +2,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 import json
+import re
 from typing import Optional
 
 from ..database import (
@@ -17,6 +18,9 @@ from ..database import (
     get_non_custom_project_channels,
     get_groups_dict,
     add_project_channel,
+    create_project,
+    get_project_by_acronym,
+    add_project_role,
 )
 from ..utils import format_channel_name
 
@@ -651,6 +655,186 @@ class AdminCog(commands.Cog):
             color=discord.Color.blue()
         )
         await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @admin_group.command(name="sync", description="Discover and import existing Discord categories as projects")
+    @app_commands.checks.has_permissions(administrator=True)
+    async def admin_sync(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+
+        guild = interaction.guild
+        existing_projects = await get_all_projects()
+        existing_category_ids = {p.category_id for p in existing_projects}
+        
+        categories = [c for c in guild.categories if c.id not in existing_category_ids]
+        
+        if not categories:
+            await interaction.followup.send("No new categories found to import.")
+            return
+
+        view = SyncCategorySelectView(categories, self.bot)
+        embed = discord.Embed(
+            title="Import Existing Categories",
+            description="Select categories to import as projects.\nChannels and roles will be auto-detected.",
+            color=discord.Color.blue()
+        )
+        await interaction.followup.send(embed=embed, view=view)
+
+
+class SyncCategorySelectView(discord.ui.View):
+    def __init__(self, categories: list, bot: commands.Bot):
+        super().__init__(timeout=300)
+        self.categories = categories
+        self.bot = bot
+        self.selected_categories = []
+        
+        options = [
+            discord.SelectOption(label=c.name[:100], value=str(c.id), description=f"{len(c.channels)} channels")
+            for c in categories[:25]
+        ]
+        self.add_item(SyncCategorySelect(options))
+
+    async def do_import(self, interaction: discord.Interaction):
+        await interaction.response.defer()
+        
+        results = []
+        for cat_id in self.selected_categories:
+            category = interaction.guild.get_channel(int(cat_id))
+            if not category:
+                continue
+            
+            acronym = self.extract_acronym(category)
+            if not acronym:
+                acronym = self.generate_acronym(category.name)
+            
+            existing = await get_project_by_acronym(acronym)
+            if existing:
+                suffix = 2
+                while await get_project_by_acronym(f"{acronym}{suffix}"):
+                    suffix += 1
+                acronym = f"{acronym}{suffix}"
+            
+            project_id = await create_project(category.name, acronym, category.id)
+            
+            channels_imported = 0
+            for channel in category.channels:
+                channel_name = self.extract_channel_name(channel.name, acronym)
+                group_name = self.detect_group(channel_name, channel)
+                
+                await add_project_channel(
+                    project_id=project_id,
+                    channel_id=channel.id,
+                    name=channel_name,
+                    group_name=group_name,
+                    is_custom=True,
+                    is_voice=isinstance(channel, discord.VoiceChannel)
+                )
+                channels_imported += 1
+            
+            roles_imported = 0
+            role_suffixes = ['Coder', 'Artist', 'Audio', 'Writer', 'QA']
+            for suffix in role_suffixes:
+                role = discord.utils.find(
+                    lambda r: acronym.upper() in r.name.upper() and suffix.upper() in r.name.upper(),
+                    interaction.guild.roles
+                )
+                if role:
+                    await add_project_role(project_id, role.id, suffix)
+                    roles_imported += 1
+            
+            results.append(f"**{category.name}** (`{acronym}`): {channels_imported} channels, {roles_imported} roles")
+        
+        embed = discord.Embed(
+            title="Import Complete",
+            description="\n".join(results) if results else "No categories imported.",
+            color=discord.Color.green()
+        )
+        await interaction.followup.send(embed=embed)
+
+    def extract_acronym(self, category: discord.CategoryChannel) -> Optional[str]:
+        for channel in category.channels:
+            match = re.match(r'^[^\w]*([a-zA-Z]{2,6})-', channel.name)
+            if match:
+                return match.group(1).upper()
+        return None
+
+    def generate_acronym(self, name: str) -> str:
+        words = re.findall(r'\b[A-Za-z]+', name)
+        if len(words) == 1:
+            return words[0][:3].upper()
+        return ''.join(w[0] for w in words[:4]).upper()
+
+    def extract_channel_name(self, full_name: str, acronym: str) -> str:
+        pattern = rf'^[^\w]*{re.escape(acronym.lower())}-(.+)$'
+        match = re.match(pattern, full_name, re.IGNORECASE)
+        if match:
+            return match.group(1)
+        clean = re.sub(r'^[^\w]+', '', full_name)
+        return clean
+
+    def detect_group(self, channel_name: str, channel) -> str:
+        name_lower = channel_name.lower()
+        
+        if isinstance(channel, discord.VoiceChannel):
+            return 'voice'
+        
+        group_keywords = {
+            'code': ['code', 'dev', 'programming', 'frontend', 'backend', 'bug'],
+            'design': ['art', 'design', 'gui', '3d', '2d', 'animation', 'vfx', 'concept'],
+            'audio': ['audio', 'music', 'sfx', 'sound'],
+            'writing': ['writing', 'story', 'dialogue', 'lore', 'copy'],
+            'qa': ['qa', 'test', 'playtest', 'feedback', 'bug'],
+            'resources': ['resource', 'ref', 'tool', 'asset'],
+            'general': ['general', 'chat', 'announce', 'task', 'lead', 'idea', 'brainstorm'],
+        }
+        
+        for group, keywords in group_keywords.items():
+            if any(kw in name_lower for kw in keywords):
+                return group
+        
+        return 'general'
+
+
+class SyncCategorySelect(discord.ui.Select):
+    def __init__(self, options: list):
+        super().__init__(
+            placeholder="Select categories to import...",
+            options=options,
+            min_values=1,
+            max_values=len(options)
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        self.view.selected_categories = self.values
+        confirm_view = SyncConfirmView(self.view)
+        
+        cat_names = []
+        for cat_id in self.values:
+            cat = interaction.guild.get_channel(int(cat_id))
+            if cat:
+                cat_names.append(f"- {cat.name}")
+        
+        embed = discord.Embed(
+            title="Confirm Import",
+            description=f"Import these categories as projects?\n\n" + "\n".join(cat_names),
+            color=discord.Color.orange()
+        )
+        await interaction.response.edit_message(embed=embed, view=confirm_view)
+
+
+class SyncConfirmView(discord.ui.View):
+    def __init__(self, parent_view: SyncCategorySelectView):
+        super().__init__(timeout=60)
+        self.parent_view = parent_view
+
+    @discord.ui.button(label="Import", style=discord.ButtonStyle.success, emoji="\u2705")
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.parent_view.do_import(interaction)
+        self.stop()
+
+    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary, emoji="\u274c")
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.edit_message(content="Import cancelled.", embed=None, view=None)
+        self.stop()
 
 
 async def setup(bot: commands.Bot):

@@ -21,6 +21,7 @@ from ..database import (
     get_groups_dict,
     clear_template_channels,
     upsert_template_channel,
+    get_server_config,
 )
 from ..utils import format_channel_name
 
@@ -118,6 +119,12 @@ class TemplatesCog(commands.Cog):
         template_names = {ch.name for ch in template_channels}
         groups = await get_groups_dict()
         
+        server_config = await get_server_config(interaction.guild.id)
+        lead_role_ids = []
+        if server_config and server_config.config_json:
+            cfg = json.loads(server_config.config_json) if isinstance(server_config.config_json, str) else server_config.config_json
+            lead_role_ids = cfg.get('lead_role_ids', [])
+        
         added_count = 0
         removed_count = 0
         errors = []
@@ -137,12 +144,26 @@ class TemplatesCog(commands.Cog):
                     channel_name = format_channel_name(emoji, project.acronym, template_ch.name)
                     
                     try:
+                        is_leads_channel = 'lead' in template_ch.name.lower()
+                        overwrites = None
+                        
+                        if is_leads_channel and lead_role_ids:
+                            overwrites = {
+                                interaction.guild.default_role: discord.PermissionOverwrite(read_messages=False),
+                                interaction.guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True)
+                            }
+                            for role_id in lead_role_ids:
+                                role = interaction.guild.get_role(role_id)
+                                if role:
+                                    overwrites[role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
+                        
                         if template_ch.is_voice:
                             new_channel = await category.create_voice_channel(name=channel_name)
                         else:
                             new_channel = await category.create_text_channel(
                                 name=channel_name,
-                                topic=template_ch.description
+                                topic=template_ch.description,
+                                overwrites=overwrites
                             )
                         
                         await add_project_channel(

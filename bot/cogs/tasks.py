@@ -390,6 +390,116 @@ class PrioritySelectView(discord.ui.View):
         await interaction.response.send_message(f"Priority updated to: {new_priority}", ephemeral=True)
 
 
+class QuestionModal(discord.ui.Modal, title='Ask a Question'):
+    question_input = discord.ui.TextInput(
+        label='Your Question',
+        style=discord.TextStyle.paragraph,
+        placeholder='Type your question here...',
+        required=True,
+        max_length=1000
+    )
+
+    def __init__(self, task_id: int, cog: 'TasksCog'):
+        super().__init__()
+        self.task_id = task_id
+        self.cog = cog
+
+    async def on_submit(self, interaction: discord.Interaction):
+        task = await get_task(self.task_id)
+        if not task:
+            await interaction.response.send_message("Task not found.", ephemeral=True)
+            return
+
+        project = await get_project_by_acronym(task.project_acronym)
+        if not project:
+            await interaction.response.send_message("Project not found.", ephemeral=True)
+            return
+
+        guild = interaction.guild
+        leads_channel = discord.utils.find(
+            lambda c: 'lead' in c.name.lower() and task.project_acronym.lower() in c.name.lower(),
+            guild.text_channels
+        )
+
+        if not leads_channel:
+            await interaction.response.send_message("Could not find leads channel. Please contact a lead directly.", ephemeral=True)
+            return
+
+        thread = guild.get_channel(task.thread_id)
+        thread_link = f"[Go to Thread]({thread.jump_url})" if thread else "*Thread unavailable*"
+
+        embed = discord.Embed(
+            title=f"Question on: {task.title}",
+            description=str(self.question_input),
+            color=discord.Color.orange()
+        )
+        embed.add_field(name="From", value=interaction.user.mention, inline=True)
+        embed.add_field(name="Thread", value=thread_link, inline=True)
+        embed.set_footer(text="Use the Reply button to respond (will be posted in the task thread)")
+
+        view = LeadReplyView(self.task_id, task.thread_id, interaction.user.id, self.cog)
+        await leads_channel.send(embed=embed, view=view)
+
+        await interaction.response.send_message(
+            "Your question has been sent to the leads!\n"
+            "*Tip: If you need to attach files, post them in the task thread after asking your question.*",
+            ephemeral=True
+        )
+
+
+class LeadReplyModal(discord.ui.Modal, title='Reply to Question'):
+    reply_input = discord.ui.TextInput(
+        label='Your Reply',
+        style=discord.TextStyle.paragraph,
+        placeholder='Type your reply here...',
+        required=True,
+        max_length=1500
+    )
+
+    def __init__(self, task_id: int, thread_id: int, asker_id: int, cog: 'TasksCog'):
+        super().__init__()
+        self.task_id = task_id
+        self.thread_id = thread_id
+        self.asker_id = asker_id
+        self.cog = cog
+
+    async def on_submit(self, interaction: discord.Interaction):
+        thread = interaction.guild.get_channel(self.thread_id)
+        if not thread:
+            await interaction.response.send_message("Thread no longer exists.", ephemeral=True)
+            return
+
+        embed = discord.Embed(
+            title="Lead Response",
+            description=str(self.reply_input),
+            color=discord.Color.green()
+        )
+        embed.set_author(name=interaction.user.display_name, icon_url=interaction.user.display_avatar.url)
+
+        await thread.send(f"<@{self.asker_id}>", embed=embed)
+        await interaction.response.send_message("Reply sent to the task thread!", ephemeral=True)
+
+
+class LeadReplyView(discord.ui.View):
+    def __init__(self, task_id: int, thread_id: int, asker_id: int, cog: 'TasksCog'):
+        super().__init__(timeout=None)
+        self.task_id = task_id
+        self.thread_id = thread_id
+        self.asker_id = asker_id
+        self.cog = cog
+
+    @discord.ui.button(label='Reply', style=discord.ButtonStyle.success, emoji='\U0001f4ac')
+    async def reply_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not interaction.user.guild_permissions.administrator:
+            lead_roles = [r for r in interaction.user.roles if 'lead' in r.name.lower() or 'admin' in r.name.lower()]
+            if not lead_roles:
+                await interaction.response.send_message("Only leads can reply.", ephemeral=True)
+                return
+
+        modal = LeadReplyModal(self.task_id, self.thread_id, self.asker_id, self.cog)
+        await interaction.response.send_modal(modal)
+
+
 class ETAModal(discord.ui.Modal, title='Update ETA'):
     eta_input = discord.ui.TextInput(
         label='ETA',
@@ -513,28 +623,8 @@ class TaskView(discord.ui.View):
         if not await self.check_assignee(interaction):
             return
 
-        task = await get_task(self.task_id)
-        
-        # Find leads channel for this game
-        game = await get_project_by_acronym(task.project_acronym)
-        if game:
-            guild = interaction.guild
-            leads_channel = discord.utils.find(
-                lambda c: 'lead' in c.name.lower() and task.project_acronym.lower() in c.name.lower(),
-                guild.text_channels
-            )
-            if leads_channel:
-                thread = guild.get_channel(task.thread_id)
-                thread_link = thread.jump_url if thread else "Thread not found"
-                await leads_channel.send(
-                    f"\u2753 **Question on Task:** {task.title}\n"
-                    f"From: {interaction.user.mention}\n"
-                    f"Thread: {thread_link}"
-                )
-                await interaction.response.send_message("Lead has been notified!", ephemeral=True)
-                return
-
-        await interaction.response.send_message("Could not find leads channel. Please contact a lead directly.", ephemeral=True)
+        modal = QuestionModal(self.task_id, self.cog)
+        await interaction.response.send_modal(modal)
 
     @discord.ui.button(label='Submit for Review', style=discord.ButtonStyle.success, emoji='\u2705', custom_id='task_review')
     async def review_button(self, interaction: discord.Interaction, button: discord.ui.Button):
