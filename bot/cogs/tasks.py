@@ -340,20 +340,23 @@ class HeaderView(discord.ui.View):
         await update_task_status(self.task_id, 'cancelled')
         await add_task_history(self.task_id, interaction.user.id, 'status_change', old_status, 'cancelled')
 
-        # Update embeds
         task.status = 'cancelled'
+        await interaction.response.send_message("Task cancelled.", ephemeral=True)
+        
         await self.cog.update_control_panel(interaction, task)
         await self.cog.update_header_message(interaction, task)
         await self.cog.update_dashboard(task.project_acronym, interaction.client)
 
-        # Archive thread
         if task.thread_id:
             thread = interaction.guild.get_channel(task.thread_id)
+            if not thread:
+                try:
+                    thread = await interaction.guild.fetch_channel(task.thread_id)
+                except discord.NotFound:
+                    thread = None
             if thread and isinstance(thread, discord.Thread):
                 await thread.send(f"\u274c Task cancelled by {interaction.user.mention}")
                 await thread.edit(archived=True, locked=True)
-
-        await interaction.response.send_message("Task cancelled.", ephemeral=True)
 
 
 class PrioritySelectView(discord.ui.View):
@@ -751,9 +754,15 @@ class TaskView(discord.ui.View):
         await self.cog.update_header_message(interaction, task)
         await self.cog.update_dashboard(task.project_acronym, interaction.client)
 
-        thread = interaction.channel
-        if isinstance(thread, discord.Thread):
-            await thread.edit(archived=True, locked=True)
+        if task.thread_id:
+            thread = interaction.guild.get_channel(task.thread_id)
+            if not thread:
+                try:
+                    thread = await interaction.guild.fetch_channel(task.thread_id)
+                except discord.NotFound:
+                    thread = None
+            if thread and isinstance(thread, discord.Thread):
+                await thread.edit(archived=True, locked=True)
 
 
 class TasksCog(commands.Cog):
