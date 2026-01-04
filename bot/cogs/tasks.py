@@ -597,9 +597,9 @@ class TaskView(discord.ui.View):
         await add_task_history(self.task_id, interaction.user.id, 'status_change', 'todo', 'progress')
         
         task.status = 'progress'
+        await interaction.response.send_message("Task started!", ephemeral=True)
         await self.cog.update_control_panel(interaction, task)
         await self.cog.update_dashboard(task.project_acronym, interaction.client)
-        await interaction.response.send_message("Task started!", ephemeral=True)
 
     @discord.ui.button(label='Pause', style=discord.ButtonStyle.secondary, emoji='\u23f8\ufe0f', custom_id='task_pause')
     async def pause_button(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -615,9 +615,9 @@ class TaskView(discord.ui.View):
         await add_task_history(self.task_id, interaction.user.id, 'status_change', 'progress', 'todo')
 
         task.status = 'todo'
+        await interaction.response.send_message("Task paused.", ephemeral=True)
         await self.cog.update_control_panel(interaction, task)
         await self.cog.update_dashboard(task.project_acronym, interaction.client)
-        await interaction.response.send_message("Task paused.", ephemeral=True)
 
     @discord.ui.button(label='Update ETA', style=discord.ButtonStyle.primary, emoji='\U0001f4c5', custom_id='task_eta')
     async def eta_button(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -650,11 +650,12 @@ class TaskView(discord.ui.View):
         await add_task_history(self.task_id, interaction.user.id, 'status_change', old_status, 'review')
 
         task.status = 'review'
+        await interaction.response.send_message("Task submitted for review! Lead has been notified.", ephemeral=True)
+        
         await self.cog.update_control_panel(interaction, task)
         await self.cog.update_header_message(interaction, task)
         await self.cog.update_dashboard(task.project_acronym, interaction.client)
 
-        # Notify leads
         game = await get_project_by_acronym(task.project_acronym)
         if game:
             guild = interaction.guild
@@ -670,8 +671,6 @@ class TaskView(discord.ui.View):
                     f"By: {interaction.user.mention}\n"
                     f"Thread: {thread_link}"
                 )
-
-        await interaction.response.send_message("Task submitted for review! Lead has been notified.", ephemeral=True)
 
     @discord.ui.button(label='Approve & Close', style=discord.ButtonStyle.danger, emoji='\U0001f3c1', custom_id='task_approve')
     async def approve_button(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -723,11 +722,11 @@ class TaskView(discord.ui.View):
         if approved >= required:
             await self._complete_task(interaction, task)
         else:
-            await self.cog.update_control_panel(interaction, task)
             await interaction.response.send_message(
                 f"Your approval recorded! ({approved}/{required} needed to close)",
                 ephemeral=True
             )
+            await self.cog.update_control_panel(interaction, task)
 
     def _calculate_required_approvals(self, total: int, mode: str) -> int:
         if mode == 'any':
@@ -746,6 +745,8 @@ class TaskView(discord.ui.View):
         await add_task_history(self.task_id, interaction.user.id, 'status_change', old_status, 'done')
 
         task.status = 'done'
+        await interaction.response.send_message("Task approved and closed!", ephemeral=True)
+        
         await self.cog.update_control_panel(interaction, task)
         await self.cog.update_header_message(interaction, task)
         await self.cog.update_dashboard(task.project_acronym, interaction.client)
@@ -753,8 +754,6 @@ class TaskView(discord.ui.View):
         thread = interaction.channel
         if isinstance(thread, discord.Thread):
             await thread.edit(archived=True, locked=True)
-
-        await interaction.response.send_message("Task approved and closed!", ephemeral=True)
 
 
 class TasksCog(commands.Cog):
