@@ -4,7 +4,7 @@ from typing import Optional
 
 
 @dataclass
-class Game:
+class Project:
     id: Optional[int]
     name: str
     acronym: str
@@ -29,9 +29,9 @@ class TemplateChannel:
 
 
 @dataclass
-class GameChannel:
+class ProjectChannel:
     id: Optional[int]
-    game_id: int
+    project_id: int
     channel_id: int
     name: str
     group_name: str
@@ -40,9 +40,9 @@ class GameChannel:
 
 
 @dataclass
-class GameRole:
+class ProjectRole:
     id: Optional[int]
-    game_id: int
+    project_id: int
     role_id: int
     suffix: str  # e.g., "-Coder"
 
@@ -50,7 +50,7 @@ class GameRole:
 @dataclass
 class Task:
     id: Optional[int]
-    game_acronym: str
+    project_acronym: str
     title: str
     description: Optional[str]
     assignee_id: int
@@ -80,7 +80,7 @@ class TaskHistory:
 @dataclass
 class TaskBoard:
     id: Optional[int]
-    game_acronym: str
+    project_acronym: str
     channel_id: int
     message_ids: str
 

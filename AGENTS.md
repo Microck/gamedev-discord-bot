@@ -1,10 +1,10 @@
 # PROJECT KNOWLEDGE BASE
 
 **Generated:** 2026-01-04
-**Context:** Discord bot for game dev project management
+**Context:** Discord bot for dev team project management
 
 ## OVERVIEW
-Python Discord bot (`discord.py` + `aiosqlite`). Manages game projects via auto-generated channels, role sync, and Trello-like task boards with multi-assignee support.
+Python Discord bot (`discord.py` + `aiosqlite`). Manages projects via auto-generated channels, role sync, and Trello-like task boards with multi-assignee support. Originally built for game dev, works for any project-based workflow.
 
 ## STRUCTURE
 ```
@@ -23,15 +23,15 @@ Python Discord bot (`discord.py` + `aiosqlite`). Manages game projects via auto-
 ## COMMAND GROUPS (4 total)
 | Group | Cog | Commands |
 |-------|-----|----------|
-| `/game` | games.py | new, delete, list, addchannel, removechannel, member, members |
+| `/project` | projects.py | new, delete, list, addchannel, removechannel, member, members |
 | `/template` | templates.py | list, add, remove, sync, export, import, groups, emoji |
-| `/task` | tasks.py | new, close, list, board, help |
+| `/task` | tasks.py | new, close, list, board, delete, import, help |
 | `/admin` | setup.py | setup, status, migrate, channels, members |
 
 ## KEY TABLES
 | Table | Purpose |
 |-------|---------|
-| `games` | Game records (name, acronym, category_id) |
+| `projects` | Project records (name, acronym, category_id) |
 | `tasks` | Task records (title, status, deadlines) |
 | `task_assignees` | Multi-assignee (user_id, is_primary, has_approved) |
 | `server_config` | Per-server setup (approval rules, lead roles) |

@@ -2,11 +2,11 @@ import discord
 from discord.ext import commands
 
 from .config import DISCORD_TOKEN, GUILD_ID, MEMBER_ROLES
-from .database import init_db, get_all_games, get_game_roles, get_all_game_roles
+from .database import init_db, get_all_projects, get_project_roles, get_all_project_roles
 from .utils import format_role_name
 
 
-class GameDevBot(commands.Bot):
+class ProjectBot(commands.Bot):
     def __init__(self):
         intents = discord.Intents.default()
         intents.members = True
@@ -16,7 +16,7 @@ class GameDevBot(commands.Bot):
     async def setup_hook(self):
         await init_db()
         await self.load_extension("bot.cogs.templates")
-        await self.load_extension("bot.cogs.games")
+        await self.load_extension("bot.cogs.projects")
         await self.load_extension("bot.cogs.tasks")
         await self.load_extension("bot.cogs.setup")
         
@@ -31,15 +31,12 @@ class GameDevBot(commands.Bot):
         print(f"Logged in as {self.user} (ID: {self.user.id})")
         print("------")
         
-        # Sync roles on startup
-        await self.sync_all_game_roles()
+        await self.sync_all_project_roles()
     
     async def on_member_update(self, before: discord.Member, after: discord.Member):
-        """When member roles change, update their game roles."""
         before_roles = set(r.name for r in before.roles)
         after_roles = set(r.name for r in after.roles)
         
-        # Check if any member roles changed
         member_roles_changed = False
         for role_name in MEMBER_ROLES:
             if (role_name in before_roles) != (role_name in after_roles):
@@ -49,11 +46,9 @@ class GameDevBot(commands.Bot):
         if not member_roles_changed:
             return
         
-        # Update game roles for this member
-        await self.sync_member_game_roles(after)
+        await self.sync_member_project_roles(after)
     
-    async def sync_all_game_roles(self):
-        """Sync game roles for all members based on their member roles."""
+    async def sync_all_project_roles(self):
         if not GUILD_ID:
             return
         
@@ -61,53 +56,49 @@ class GameDevBot(commands.Bot):
         if not guild:
             return
         
-        games = await get_all_games()
-        if not games:
+        projects = await get_all_projects()
+        if not projects:
             return
         
-        print(f"Syncing game roles for {len(guild.members)} members...")
+        print(f"Syncing project roles for {len(guild.members)} members...")
         
         for member in guild.members:
             if member.bot:
                 continue
-            await self.sync_member_game_roles(member)
+            await self.sync_member_project_roles(member)
         
-        print("Game role sync complete.")
+        print("Project role sync complete.")
     
-    async def sync_member_game_roles(self, member: discord.Member):
-        """Sync game roles for a single member based on their member roles."""
+    async def sync_member_project_roles(self, member: discord.Member):
         guild = member.guild
         member_role_names = {r.name for r in member.roles}
         
-        # Get all game roles from DB
-        all_game_roles = await get_all_game_roles()
+        all_project_roles = await get_all_project_roles()
         
-        # Map suffix -> member role name
         suffix_to_member_role = {role: role for role in MEMBER_ROLES}
         
         roles_to_add = []
         roles_to_remove = []
         
-        for game_role in all_game_roles:
-            discord_role = guild.get_role(game_role.role_id)
+        for project_role in all_project_roles:
+            discord_role = guild.get_role(project_role.role_id)
             if not discord_role:
                 continue
             
-            # Check if member has corresponding member role
-            member_role_name = suffix_to_member_role.get(game_role.suffix)
+            member_role_name = suffix_to_member_role.get(project_role.suffix)
             has_member_role = member_role_name and member_role_name in member_role_names
-            has_game_role = discord_role in member.roles
+            has_project_role = discord_role in member.roles
             
-            if has_member_role and not has_game_role:
+            if has_member_role and not has_project_role:
                 roles_to_add.append(discord_role)
-            elif not has_member_role and has_game_role:
+            elif not has_member_role and has_project_role:
                 roles_to_remove.append(discord_role)
         
         try:
             if roles_to_add:
-                await member.add_roles(*roles_to_add, reason="Game role sync")
+                await member.add_roles(*roles_to_add, reason="Project role sync")
             if roles_to_remove:
-                await member.remove_roles(*roles_to_remove, reason="Game role sync")
+                await member.remove_roles(*roles_to_remove, reason="Project role sync")
         except discord.Forbidden:
             print(f"Missing permissions to modify roles for {member.name}")
         except discord.HTTPException as e:
@@ -119,7 +110,7 @@ def main():
         print("Error: DISCORD_TOKEN not set in environment")
         return
     
-    bot = GameDevBot()
+    bot = ProjectBot()
     bot.run(DISCORD_TOKEN)
 
 

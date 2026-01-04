@@ -5,7 +5,7 @@
 <h1 align="center">tupac</h1>
 
 <p align="center">
-  discord bot for organizing dev projects with auto-generated channels, roles, acronyms, and task management.
+  discord bot for organizing dev team projects with auto-generated channels, roles, acronyms, and task management. originally built for game dev teams, works for any project-based workflow.
 </p>
 
 <p align="center">
@@ -47,11 +47,11 @@ python -m bot.main
 
 ### features
 
-- **auto channels:** creates 25+ organized channels per game from a template
+- **auto channels:** creates 25+ organized channels per project from a template
 - **smart acronyms:** "Neon Drift" -> ND, "The Great Escape" -> TGE
-- **role sync:** members with @Coder auto-get @ND-Coder for every game
+- **role sync:** members with @Coder auto-get @ND-Coder for every project
 - **emoji groups:** channels prefixed by category (💻-nd-frontend, 🎨-nd-concept)
-- **live templates:** modify template, sync to all existing games instantly
+- **live templates:** modify template, sync to all existing projects instantly
 - **task management:** trello-style task tracking with threads, dashboards, automation
 - **multi-assignee:** assign multiple people to tasks with configurable approval rules
 - **setup wizard:** interactive `/admin setup` to configure task system
@@ -64,17 +64,17 @@ all commands organized into 4 groups:
 
 | group | command | description |
 |-------|---------|-------------|
-| **game** | `/game new <name>` | create game with channels and roles |
-| | `/game delete <acronym>` | delete game and all channels/roles |
-| | `/game list` | list all games |
-| | `/game addchannel` | add custom channel to a game |
-| | `/game removechannel` | remove channel from a game |
-| | `/game member add/remove` | assign/remove member roles |
-| | `/game members` | list all users with roles |
+| **project** | `/project new <name>` | create project with channels and roles |
+| | `/project delete <acronym>` | delete project and all channels/roles |
+| | `/project list` | list all projects |
+| | `/project addchannel` | add custom channel to a project |
+| | `/project removechannel` | remove channel from a project |
+| | `/project member add/remove` | assign/remove member roles |
+| | `/project members` | list all users with roles |
 | **template** | `/template list` | show channel template |
 | | `/template add` | add channel to template |
 | | `/template remove` | remove from template |
-| | `/template sync` | sync template to all games |
+| | `/template sync` | sync template to all projects |
 | | `/template export` | download template as JSON |
 | | `/template import` | import template from JSON |
 | | `/template groups` | list groups and emojis |
@@ -82,7 +82,7 @@ all commands organized into 4 groups:
 | **task** | `/task new` | create task with thread |
 | | `/task close [id]` | close task (run in thread or specify ID) |
 | | `/task list [user]` | list active tasks |
-| | `/task board <game>` | show/refresh task dashboard |
+| | `/task board <project>` | show/refresh task dashboard |
 | | `/task import <file>` | bulk import tasks from JSON/XML |
 | | `/task delete <id>` | delete a task |
 | | `/task help` | show detailed help |
@@ -96,28 +96,28 @@ all commands organized into 4 groups:
 
 ### usage
 
-#### 1. create a game
+#### 1. create a project
 
 ```
-/game new "Neon Drift"
+/project new "Neon Drift"
 ```
 
 creates:
 - category with 25+ channels from template
-- game-specific roles: `@ND-Coder`, `@ND-Artist`, `@ND-Audio`, `@ND-Writer`, `@ND-QA`
+- project-specific roles: `@ND-Coder`, `@ND-Artist`, `@ND-Audio`, `@ND-Writer`, `@ND-QA`
 - channels prefixed with acronym: `nd-general`, `nd-code-frontend`, etc.
 
 #### 2. manage members
 
 ```
-/game member add @user Coder   -> assign role
-/game member remove @user Coder -> remove role
-/game members                   -> list all
+/project member add @user Coder   -> assign role
+/project member remove @user Coder -> remove role
+/project members                   -> list all
 ```
 
 available roles: `Coder`, `Artist`, `Audio`, `Writer`, `QA`
 
-members with base roles auto-get game roles (e.g., @Coder gets @ND-Coder)
+members with base roles auto-get project roles (e.g., @Coder gets @ND-Coder)
 
 #### 3. manage templates
 
@@ -125,7 +125,7 @@ members with base roles auto-get game roles (e.g., @Coder gets @ND-Coder)
 /template list                  -> view current template
 /template add <name> <group>    -> add channel to template
 /template remove <name>         -> remove from template
-/template sync                  -> apply changes to all games
+/template sync                  -> apply changes to all projects
 /template export                -> download as JSON
 /template import <file>         -> import from JSON
 ```
@@ -169,7 +169,7 @@ members with base roles auto-get game roles (e.g., @Coder gets @ND-Coder)
 ```
 
 **Quick Setup** - choose channel mode first:
-- **Per-Game**: adds `task-board`, `task-questions`, `task-leads` to the template and syncs to all existing games
+- **Per-Project**: adds `task-board`, `task-questions`, `task-leads` to the template and syncs to all existing projects
 - **Global**: creates a single `Tasks` category with shared channels
 
 Then configure lead roles and approval mode.
@@ -261,7 +261,7 @@ use `/admin channels` and `/admin members` to get IDs.
 ### project structure
 
 ```
-gamedev-discord-bot/
+tupac/
 ├── bot/
 │   ├── main.py          # bot entry, role sync
 │   ├── config.py        # env vars
@@ -269,7 +269,7 @@ gamedev-discord-bot/
 │   ├── models.py        # dataclasses
 │   ├── utils.py         # acronym generation
 │   └── cogs/
-│       ├── games.py     # /game commands
+│       ├── projects.py  # /project commands
 │       ├── templates.py # /template commands
 │       ├── tasks.py     # /task commands
 │       └── setup.py     # /admin commands
@@ -287,7 +287,7 @@ gamedev-discord-bot/
 
 **permission errors** - move bot role higher in server role list
 
-**acronym conflicts** - if "ND" exists, new game becomes "ND2", or specify custom: `/game new "Name" acronym:XYZ`
+**acronym conflicts** - if "ND" exists, new project becomes "ND2", or specify custom: `/project new "Name" acronym:XYZ`
 
 **task threads not working** - bot needs "Create Public Threads" and "Send Messages in Threads" permissions
 

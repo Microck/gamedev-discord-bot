@@ -2,7 +2,7 @@ import aiosqlite
 from typing import List, Optional, Set
 
 from .config import DATABASE_PATH, DEFAULT_GROUPS, DEFAULT_TEMPLATE
-from .models import Game, Group, TemplateChannel, GameChannel, GameRole, Task, TaskHistory, TaskBoard, TaskAssignee, ServerConfig
+from .models import Project, Group, TemplateChannel, ProjectChannel, ProjectRole, Task, TaskHistory, TaskBoard, TaskAssignee, ServerConfig
 
 
 async def init_db():
@@ -10,7 +10,7 @@ async def init_db():
     async with aiosqlite.connect(DATABASE_PATH) as db:
         # Create tables
         await db.executescript("""
-            CREATE TABLE IF NOT EXISTS games (
+            CREATE TABLE IF NOT EXISTS projects (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL,
                 acronym TEXT UNIQUE NOT NULL,
@@ -33,29 +33,29 @@ async def init_db():
                 UNIQUE(name)
             );
 
-            CREATE TABLE IF NOT EXISTS game_channels (
+            CREATE TABLE IF NOT EXISTS project_channels (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                game_id INTEGER NOT NULL,
+                project_id INTEGER NOT NULL,
                 channel_id INTEGER NOT NULL,
                 name TEXT NOT NULL,
                 group_name TEXT NOT NULL,
                 is_custom BOOLEAN DEFAULT 0,
                 is_voice BOOLEAN DEFAULT 0,
-                FOREIGN KEY (game_id) REFERENCES games(id) ON DELETE CASCADE
+                FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
             );
 
-            CREATE TABLE IF NOT EXISTS game_roles (
+            CREATE TABLE IF NOT EXISTS project_roles (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                game_id INTEGER NOT NULL,
+                project_id INTEGER NOT NULL,
                 role_id INTEGER NOT NULL,
                 suffix TEXT NOT NULL,
-                FOREIGN KEY (game_id) REFERENCES games(id) ON DELETE CASCADE
+                FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
             );
 
             -- Task management tables
             CREATE TABLE IF NOT EXISTS tasks (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                game_acronym TEXT NOT NULL,
+                project_acronym TEXT NOT NULL,
                 title TEXT NOT NULL,
                 description TEXT,
                 assignee_id INTEGER NOT NULL,
@@ -84,7 +84,7 @@ async def init_db():
 
             CREATE TABLE IF NOT EXISTS task_boards (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                game_acronym TEXT NOT NULL UNIQUE,
+                project_acronym TEXT NOT NULL UNIQUE,
                 channel_id INTEGER NOT NULL,
                 message_ids TEXT NOT NULL
             );
@@ -127,6 +127,64 @@ async def init_db():
             CREATE INDEX IF NOT EXISTS idx_task_assignees_user_id 
             ON task_assignees(user_id)
         """)
+        
+        cursor = await db.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='games'")
+        if await cursor.fetchone():
+            await db.execute("ALTER TABLE games RENAME TO projects")
+            await db.execute("ALTER TABLE game_channels RENAME TO project_channels")
+            await db.execute("ALTER TABLE game_roles RENAME TO project_roles")
+            
+            cursor = await db.execute("PRAGMA table_info(tasks)")
+            columns = [row[1] for row in await cursor.fetchall()]
+            if 'game_acronym' in columns:
+                await db.execute("""
+                    CREATE TABLE tasks_new (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        project_acronym TEXT NOT NULL,
+                        title TEXT NOT NULL,
+                        description TEXT,
+                        assignee_id INTEGER NOT NULL,
+                        target_channel_id INTEGER NOT NULL,
+                        thread_id INTEGER,
+                        control_message_id INTEGER,
+                        header_message_id INTEGER,
+                        status TEXT DEFAULT 'todo',
+                        deadline DATETIME,
+                        eta TEXT,
+                        priority TEXT,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+                await db.execute("""
+                    INSERT INTO tasks_new (id, project_acronym, title, description, assignee_id, 
+                        target_channel_id, thread_id, control_message_id, header_message_id,
+                        status, deadline, eta, priority, created_at, updated_at)
+                    SELECT id, game_acronym, title, description, assignee_id,
+                        target_channel_id, thread_id, control_message_id, header_message_id,
+                        status, deadline, eta, priority, created_at, updated_at
+                    FROM tasks
+                """)
+                await db.execute("DROP TABLE tasks")
+                await db.execute("ALTER TABLE tasks_new RENAME TO tasks")
+            
+            cursor = await db.execute("PRAGMA table_info(task_boards)")
+            columns = [row[1] for row in await cursor.fetchall()]
+            if 'game_acronym' in columns:
+                await db.execute("""
+                    CREATE TABLE task_boards_new (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        project_acronym TEXT NOT NULL UNIQUE,
+                        channel_id INTEGER NOT NULL,
+                        message_ids TEXT NOT NULL
+                    )
+                """)
+                await db.execute("""
+                    INSERT INTO task_boards_new (id, project_acronym, channel_id, message_ids)
+                    SELECT id, game_acronym, channel_id, message_ids FROM task_boards
+                """)
+                await db.execute("DROP TABLE task_boards")
+                await db.execute("ALTER TABLE task_boards_new RENAME TO task_boards")
         
         # Seed default groups if empty
         cursor = await db.execute("SELECT COUNT(*) FROM groups")
@@ -284,15 +342,15 @@ async def get_template_channel(name: str) -> Optional[TemplateChannel]:
         return None
 
 
-# ============== GAMES ==============
+# ============== PROJECTS ==============
 
-async def get_all_games() -> List[Game]:
+async def get_all_projects() -> List[Project]:
     async with aiosqlite.connect(DATABASE_PATH) as db:
         db.row_factory = aiosqlite.Row
-        cursor = await db.execute("SELECT * FROM games ORDER BY created_at DESC")
+        cursor = await db.execute("SELECT * FROM projects ORDER BY created_at DESC")
         rows = await cursor.fetchall()
         return [
-            Game(
+            Project(
                 id=r["id"],
                 name=r["name"],
                 acronym=r["acronym"],
@@ -303,16 +361,16 @@ async def get_all_games() -> List[Game]:
         ]
 
 
-async def get_game_by_acronym(acronym: str) -> Optional[Game]:
+async def get_project_by_acronym(acronym: str) -> Optional[Project]:
     async with aiosqlite.connect(DATABASE_PATH) as db:
         db.row_factory = aiosqlite.Row
         cursor = await db.execute(
-            "SELECT * FROM games WHERE LOWER(acronym) = LOWER(?)",
+            "SELECT * FROM projects WHERE LOWER(acronym) = LOWER(?)",
             (acronym,)
         )
         row = await cursor.fetchone()
         if row:
-            return Game(
+            return Project(
                 id=row["id"],
                 name=row["name"],
                 acronym=row["acronym"],
@@ -324,19 +382,19 @@ async def get_game_by_acronym(acronym: str) -> Optional[Game]:
 
 async def get_all_acronyms() -> Set[str]:
     async with aiosqlite.connect(DATABASE_PATH) as db:
-        cursor = await db.execute("SELECT acronym FROM games")
+        cursor = await db.execute("SELECT acronym FROM projects")
         rows = await cursor.fetchall()
         return {r[0] for r in rows}
 
 
-async def create_game(name: str, acronym: str, category_id: int) -> Game:
+async def create_project(name: str, acronym: str, category_id: int) -> Project:
     async with aiosqlite.connect(DATABASE_PATH) as db:
         cursor = await db.execute(
-            "INSERT INTO games (name, acronym, category_id) VALUES (?, ?, ?)",
+            "INSERT INTO projects (name, acronym, category_id) VALUES (?, ?, ?)",
             (name, acronym, category_id)
         )
         await db.commit()
-        return Game(
+        return Project(
             id=cursor.lastrowid,
             name=name,
             acronym=acronym,
@@ -344,27 +402,27 @@ async def create_game(name: str, acronym: str, category_id: int) -> Game:
         )
 
 
-async def delete_game(game_id: int) -> bool:
+async def delete_project(project_id: int) -> bool:
     async with aiosqlite.connect(DATABASE_PATH) as db:
-        cursor = await db.execute("DELETE FROM games WHERE id = ?", (game_id,))
+        cursor = await db.execute("DELETE FROM projects WHERE id = ?", (project_id,))
         await db.commit()
         return cursor.rowcount > 0
 
 
-# ============== GAME CHANNELS ==============
+# ============== PROJECT CHANNELS ==============
 
-async def get_game_channels(game_id: int) -> List[GameChannel]:
+async def get_project_channels(project_id: int) -> List[ProjectChannel]:
     async with aiosqlite.connect(DATABASE_PATH) as db:
         db.row_factory = aiosqlite.Row
         cursor = await db.execute(
-            "SELECT * FROM game_channels WHERE game_id = ?",
-            (game_id,)
+            "SELECT * FROM project_channels WHERE project_id = ?",
+            (project_id,)
         )
         rows = await cursor.fetchall()
         return [
-            GameChannel(
+            ProjectChannel(
                 id=r["id"],
-                game_id=r["game_id"],
+                project_id=r["project_id"],
                 channel_id=r["channel_id"],
                 name=r["name"],
                 group_name=r["group_name"],
@@ -375,25 +433,25 @@ async def get_game_channels(game_id: int) -> List[GameChannel]:
         ]
 
 
-async def add_game_channel(
-    game_id: int,
+async def add_project_channel(
+    project_id: int,
     channel_id: int,
     name: str,
     group_name: str,
     is_custom: bool = False,
     is_voice: bool = False
-) -> GameChannel:
+) -> ProjectChannel:
     async with aiosqlite.connect(DATABASE_PATH) as db:
         cursor = await db.execute(
-            """INSERT INTO game_channels 
-               (game_id, channel_id, name, group_name, is_custom, is_voice) 
+            """INSERT INTO project_channels 
+               (project_id, channel_id, name, group_name, is_custom, is_voice) 
                VALUES (?, ?, ?, ?, ?, ?)""",
-            (game_id, channel_id, name, group_name, is_custom, is_voice)
+            (project_id, channel_id, name, group_name, is_custom, is_voice)
         )
         await db.commit()
-        return GameChannel(
+        return ProjectChannel(
             id=cursor.lastrowid,
-            game_id=game_id,
+            project_id=project_id,
             channel_id=channel_id,
             name=name,
             group_name=group_name,
@@ -402,12 +460,11 @@ async def add_game_channel(
         )
 
 
-async def remove_game_channel(game_id: int, name: str) -> Optional[int]:
-    """Remove game channel by name, return channel_id if found."""
+async def remove_project_channel(project_id: int, name: str) -> Optional[int]:
     async with aiosqlite.connect(DATABASE_PATH) as db:
         cursor = await db.execute(
-            "SELECT channel_id FROM game_channels WHERE game_id = ? AND name = ?",
-            (game_id, name)
+            "SELECT channel_id FROM project_channels WHERE project_id = ? AND name = ?",
+            (project_id, name)
         )
         row = await cursor.fetchone()
         if not row:
@@ -415,25 +472,25 @@ async def remove_game_channel(game_id: int, name: str) -> Optional[int]:
         
         channel_id = row[0]
         await db.execute(
-            "DELETE FROM game_channels WHERE game_id = ? AND name = ?",
-            (game_id, name)
+            "DELETE FROM project_channels WHERE project_id = ? AND name = ?",
+            (project_id, name)
         )
         await db.commit()
         return channel_id
 
 
-async def get_game_channel_by_name(game_id: int, name: str) -> Optional[GameChannel]:
+async def get_project_channel_by_name(project_id: int, name: str) -> Optional[ProjectChannel]:
     async with aiosqlite.connect(DATABASE_PATH) as db:
         db.row_factory = aiosqlite.Row
         cursor = await db.execute(
-            "SELECT * FROM game_channels WHERE game_id = ? AND name = ?",
-            (game_id, name)
+            "SELECT * FROM project_channels WHERE project_id = ? AND name = ?",
+            (project_id, name)
         )
         row = await cursor.fetchone()
         if row:
-            return GameChannel(
+            return ProjectChannel(
                 id=row["id"],
-                game_id=row["game_id"],
+                project_id=row["project_id"],
                 channel_id=row["channel_id"],
                 name=row["name"],
                 group_name=row["group_name"],
@@ -443,19 +500,18 @@ async def get_game_channel_by_name(game_id: int, name: str) -> Optional[GameChan
         return None
 
 
-async def get_non_custom_game_channels(game_id: int) -> List[GameChannel]:
-    """Get only template-based channels for a game."""
+async def get_non_custom_project_channels(project_id: int) -> List[ProjectChannel]:
     async with aiosqlite.connect(DATABASE_PATH) as db:
         db.row_factory = aiosqlite.Row
         cursor = await db.execute(
-            "SELECT * FROM game_channels WHERE game_id = ? AND is_custom = 0",
-            (game_id,)
+            "SELECT * FROM project_channels WHERE project_id = ? AND is_custom = 0",
+            (project_id,)
         )
         rows = await cursor.fetchall()
         return [
-            GameChannel(
+            ProjectChannel(
                 id=r["id"],
-                game_id=r["game_id"],
+                project_id=r["project_id"],
                 channel_id=r["channel_id"],
                 name=r["name"],
                 group_name=r["group_name"],
@@ -466,20 +522,20 @@ async def get_non_custom_game_channels(game_id: int) -> List[GameChannel]:
         ]
 
 
-# ============== GAME ROLES ==============
+# ============== PROJECT ROLES ==============
 
-async def get_game_roles(game_id: int) -> List[GameRole]:
+async def get_project_roles(project_id: int) -> List[ProjectRole]:
     async with aiosqlite.connect(DATABASE_PATH) as db:
         db.row_factory = aiosqlite.Row
         cursor = await db.execute(
-            "SELECT * FROM game_roles WHERE game_id = ?",
-            (game_id,)
+            "SELECT * FROM project_roles WHERE project_id = ?",
+            (project_id,)
         )
         rows = await cursor.fetchall()
         return [
-            GameRole(
+            ProjectRole(
                 id=r["id"],
-                game_id=r["game_id"],
+                project_id=r["project_id"],
                 role_id=r["role_id"],
                 suffix=r["suffix"]
             )
@@ -487,31 +543,30 @@ async def get_game_roles(game_id: int) -> List[GameRole]:
         ]
 
 
-async def add_game_role(game_id: int, role_id: int, suffix: str) -> GameRole:
+async def add_project_role(project_id: int, role_id: int, suffix: str) -> ProjectRole:
     async with aiosqlite.connect(DATABASE_PATH) as db:
         cursor = await db.execute(
-            "INSERT INTO game_roles (game_id, role_id, suffix) VALUES (?, ?, ?)",
-            (game_id, role_id, suffix)
+            "INSERT INTO project_roles (project_id, role_id, suffix) VALUES (?, ?, ?)",
+            (project_id, role_id, suffix)
         )
         await db.commit()
-        return GameRole(
+        return ProjectRole(
             id=cursor.lastrowid,
-            game_id=game_id,
+            project_id=project_id,
             role_id=role_id,
             suffix=suffix
         )
 
 
-async def get_all_game_roles() -> List[GameRole]:
-    """Get all game roles across all games."""
+async def get_all_project_roles() -> List[ProjectRole]:
     async with aiosqlite.connect(DATABASE_PATH) as db:
         db.row_factory = aiosqlite.Row
-        cursor = await db.execute("SELECT * FROM game_roles")
+        cursor = await db.execute("SELECT * FROM project_roles")
         rows = await cursor.fetchall()
         return [
-            GameRole(
+            ProjectRole(
                 id=r["id"],
-                game_id=r["game_id"],
+                project_id=r["project_id"],
                 role_id=r["role_id"],
                 suffix=r["suffix"]
             )
@@ -522,10 +577,9 @@ async def get_all_game_roles() -> List[GameRole]:
 # ============== TASKS ==============
 
 def _row_to_task(r) -> Task:
-    """Helper to convert a database row to a Task object."""
     return Task(
         id=r["id"],
-        game_acronym=r["game_acronym"],
+        project_acronym=r["project_acronym"],
         title=r["title"],
         description=r["description"],
         assignee_id=r["assignee_id"],
@@ -543,7 +597,7 @@ def _row_to_task(r) -> Task:
 
 
 async def create_task(
-    game_acronym: str,
+    project_acronym: str,
     title: str,
     description: str,
     assignee_id: int,
@@ -554,14 +608,14 @@ async def create_task(
     async with aiosqlite.connect(DATABASE_PATH) as db:
         cursor = await db.execute(
             """INSERT INTO tasks 
-               (game_acronym, title, description, assignee_id, target_channel_id, deadline, priority)
+               (project_acronym, title, description, assignee_id, target_channel_id, deadline, priority)
                VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (game_acronym, title, description, assignee_id, target_channel_id, deadline, priority)
+            (project_acronym, title, description, assignee_id, target_channel_id, deadline, priority)
         )
         await db.commit()
         return Task(
             id=cursor.lastrowid,
-            game_acronym=game_acronym,
+            project_acronym=project_acronym,
             title=title,
             description=description,
             assignee_id=assignee_id,
@@ -596,12 +650,12 @@ async def get_task_by_thread_id(thread_id: int) -> Optional[Task]:
         return None
 
 
-async def get_tasks_by_game(game_acronym: str) -> List[Task]:
+async def get_tasks_by_project(project_acronym: str) -> List[Task]:
     async with aiosqlite.connect(DATABASE_PATH) as db:
         db.row_factory = aiosqlite.Row
         cursor = await db.execute(
-            "SELECT * FROM tasks WHERE game_acronym = ? ORDER BY created_at DESC",
-            (game_acronym,)
+            "SELECT * FROM tasks WHERE project_acronym = ? ORDER BY created_at DESC",
+            (project_acronym,)
         )
         rows = await cursor.fetchall()
         return [_row_to_task(r) for r in rows]
@@ -618,13 +672,13 @@ async def get_tasks_by_assignee(assignee_id: int) -> List[Task]:
         return [_row_to_task(r) for r in rows]
 
 
-async def get_tasks_by_status(status: str, game_acronym: str = None) -> List[Task]:
+async def get_tasks_by_status(status: str, project_acronym: str = None) -> List[Task]:
     async with aiosqlite.connect(DATABASE_PATH) as db:
         db.row_factory = aiosqlite.Row
-        if game_acronym:
+        if project_acronym:
             cursor = await db.execute(
-                "SELECT * FROM tasks WHERE status = ? AND game_acronym = ? ORDER BY created_at DESC",
-                (status, game_acronym)
+                "SELECT * FROM tasks WHERE status = ? AND project_acronym = ? ORDER BY created_at DESC",
+                (status, project_acronym)
             )
         else:
             cursor = await db.execute(
@@ -784,38 +838,38 @@ async def get_task_history(task_id: int) -> List[TaskHistory]:
 
 # ============== TASK BOARDS ==============
 
-async def get_task_board(game_acronym: str) -> Optional[TaskBoard]:
+async def get_task_board(project_acronym: str) -> Optional[TaskBoard]:
     async with aiosqlite.connect(DATABASE_PATH) as db:
         db.row_factory = aiosqlite.Row
         cursor = await db.execute(
-            "SELECT * FROM task_boards WHERE game_acronym = ?",
-            (game_acronym,)
+            "SELECT * FROM task_boards WHERE project_acronym = ?",
+            (project_acronym,)
         )
         row = await cursor.fetchone()
         if row:
             return TaskBoard(
                 id=row["id"],
-                game_acronym=row["game_acronym"],
+                project_acronym=row["project_acronym"],
                 channel_id=row["channel_id"],
                 message_ids=row["message_ids"]
             )
         return None
 
 
-async def upsert_task_board(game_acronym: str, channel_id: int, message_ids: str) -> TaskBoard:
+async def upsert_task_board(project_acronym: str, channel_id: int, message_ids: str) -> TaskBoard:
     async with aiosqlite.connect(DATABASE_PATH) as db:
         await db.execute(
-            """INSERT INTO task_boards (game_acronym, channel_id, message_ids)
+            """INSERT INTO task_boards (project_acronym, channel_id, message_ids)
                VALUES (?, ?, ?)
-               ON CONFLICT(game_acronym) DO UPDATE SET
+               ON CONFLICT(project_acronym) DO UPDATE SET
                channel_id = excluded.channel_id,
                message_ids = excluded.message_ids""",
-            (game_acronym, channel_id, message_ids)
+            (project_acronym, channel_id, message_ids)
         )
         await db.commit()
         return TaskBoard(
             id=None,
-            game_acronym=game_acronym,
+            project_acronym=project_acronym,
             channel_id=channel_id,
             message_ids=message_ids
         )

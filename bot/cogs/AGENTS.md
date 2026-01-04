@@ -5,9 +5,9 @@
 ## STRUCTURE
 ```
 bot/cogs/
-├── games.py     # /game (new, delete, list, addchannel, removechannel, member, members)
+├── projects.py  # /project (new, delete, list, addchannel, removechannel, member, members)
 ├── templates.py # /template (list, add, remove, sync, export, import, groups, emoji)
-├── tasks.py     # /task (new, close, list, board, help)
+├── tasks.py     # /task (new, close, list, board, delete, import, help)
 └── setup.py     # /admin (setup, status, migrate, channels, members)
 ```
 
@@ -19,13 +19,13 @@ bot/cogs/
 
 ## COG DETAILS
 
-### Games (`games.py`)
-- `/game new` creates category + channels + roles
-- `/game member` manages Coder/Artist/Audio/Writer/QA roles
+### Projects (`projects.py`)
+- `/project new` creates category + channels + roles
+- `/project member` manages Coder/Artist/Audio/Writer/QA roles
 - Acronyms auto-generated, roles get random color
 
 ### Templates (`templates.py`)
-- `/template sync` applies changes to ALL active games
+- `/template sync` applies changes to ALL active projects
 - `/template groups` + `/template emoji` manage channel prefixes
 
 ### Tasks (`tasks.py`)

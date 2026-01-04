@@ -10,14 +10,17 @@ Handles bot lifecycle, data persistence (SQLite), and domain models. No business
 bot/
 ├── config.py       # Constants, Env vars (DISCORD_TOKEN, GUILD_ID)
 ├── database.py     # Raw SQL queries, Schema init, aiosqlite wrapper
-├── main.py         # GameDevBot class, Role Sync on startup
-├── models.py       # Dataclasses (Game, Task, TaskAssignee, ServerConfig)
+├── main.py         # ProjectBot class, Role Sync on startup
+├── models.py       # Dataclasses (Project, Task, TaskAssignee, ServerConfig)
 └── utils.py        # Acronym generator, string formatters
 ```
 
 ## KEY TABLES
 | Table | Purpose |
 |-------|---------|
+| `projects` | Project records (name, acronym, category_id) |
+| `project_channels` | Channels belonging to projects |
+| `project_roles` | Roles belonging to projects |
 | `task_assignees` | Multi-assignee (task_id, user_id, is_primary, has_approved) |
 | `server_config` | Per-server setup (guild_id, config_json, setup_completed) |
 

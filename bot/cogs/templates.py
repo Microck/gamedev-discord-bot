@@ -13,11 +13,11 @@ from ..database import (
     get_group,
     update_group_emoji,
     upsert_group,
-    get_all_games,
-    get_game_channels,
-    get_non_custom_game_channels,
-    add_game_channel,
-    remove_game_channel as db_remove_game_channel,
+    get_all_projects,
+    get_project_channels,
+    get_non_custom_project_channels,
+    add_project_channel,
+    remove_project_channel as db_remove_project_channel,
     get_groups_dict,
     clear_template_channels,
     upsert_template_channel,
@@ -104,14 +104,14 @@ class TemplatesCog(commands.Cog):
         else:
             await interaction.response.send_message(f"Channel `{name}` not found in template.")
     
-    @template_group.command(name="sync", description="Sync template to all existing games")
+    @template_group.command(name="sync", description="Sync template to all existing projects")
     @app_commands.checks.has_permissions(administrator=True)
     async def template_sync(self, interaction: discord.Interaction):
         await interaction.response.defer()
         
-        games = await get_all_games()
-        if not games:
-            await interaction.followup.send("No games to sync.")
+        projects = await get_all_projects()
+        if not projects:
+            await interaction.followup.send("No projects to sync.")
             return
         
         template_channels = await get_all_template_channels()
@@ -122,19 +122,19 @@ class TemplatesCog(commands.Cog):
         removed_count = 0
         errors = []
         
-        for game in games:
-            category = interaction.guild.get_channel(game.category_id)
+        for project in projects:
+            category = interaction.guild.get_channel(project.category_id)
             if not category:
-                errors.append(f"Category not found for {game.name}")
+                errors.append(f"Category not found for {project.name}")
                 continue
             
-            game_channels = await get_non_custom_game_channels(game.id)
-            game_channel_names = {ch.name for ch in game_channels}
+            project_channels = await get_non_custom_project_channels(project.id)
+            project_channel_names = {ch.name for ch in project_channels}
             
             for template_ch in template_channels:
-                if template_ch.name not in game_channel_names:
+                if template_ch.name not in project_channel_names:
                     emoji = groups.get(template_ch.group_name, "")
-                    channel_name = format_channel_name(emoji, game.acronym, template_ch.name)
+                    channel_name = format_channel_name(emoji, project.acronym, template_ch.name)
                     
                     try:
                         if template_ch.is_voice:
@@ -145,8 +145,8 @@ class TemplatesCog(commands.Cog):
                                 topic=template_ch.description
                             )
                         
-                        await add_game_channel(
-                            game_id=game.id,
+                        await add_project_channel(
+                            project_id=project.id,
                             channel_id=new_channel.id,
                             name=template_ch.name,
                             group_name=template_ch.group_name,
@@ -157,16 +157,16 @@ class TemplatesCog(commands.Cog):
                     except discord.HTTPException as e:
                         errors.append(f"Failed to create {channel_name}: {e}")
             
-            for game_ch in game_channels:
-                if game_ch.name not in template_names:
-                    channel = interaction.guild.get_channel(game_ch.channel_id)
+            for proj_ch in project_channels:
+                if proj_ch.name not in template_names:
+                    channel = interaction.guild.get_channel(proj_ch.channel_id)
                     if channel:
                         try:
                             await channel.delete(reason="Template sync")
                             removed_count += 1
                         except discord.HTTPException as e:
-                            errors.append(f"Failed to delete {game_ch.name}: {e}")
-                    await db_remove_game_channel(game.id, game_ch.name)
+                            errors.append(f"Failed to delete {proj_ch.name}: {e}")
+                    await db_remove_project_channel(project.id, proj_ch.name)
         
         result = f"Sync complete.\nAdded: {added_count} channels\nRemoved: {removed_count} channels"
         if errors:

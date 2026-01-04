@@ -13,16 +13,16 @@ from ..database import (
     migrate_tasks_to_multi_assignee,
     get_all_tasks,
     get_task_assignees,
-    get_all_games,
-    get_non_custom_game_channels,
+    get_all_projects,
+    get_non_custom_project_channels,
     get_groups_dict,
-    add_game_channel,
+    add_project_channel,
 )
 from ..utils import format_channel_name
 
 
 DEFAULT_CONFIG = {
-    'channel_mode': 'per_game',
+    'channel_mode': 'per_project',
     'board_channel_template': 'tasks',
     'questions_channel_template': 'questions',
     'leads_channel_template': 'leads',
@@ -39,15 +39,15 @@ class ChannelModeSelect(discord.ui.Select):
     def __init__(self):
         options = [
             discord.SelectOption(
-                label="Per-Game Channels (Recommended)",
-                value="per_game",
-                description="Each game gets its own board, questions, leads channels",
+                label="Per-Project Channels (Recommended)",
+                value="per_project",
+                description="Each project gets its own board, questions, leads channels",
                 emoji="\U0001f3ae"
             ),
             discord.SelectOption(
                 label="Global Channels",
                 value="global",
-                description="One set of channels shared across all games",
+                description="One set of channels shared across all projects",
                 emoji="\U0001f310"
             ),
         ]
@@ -168,11 +168,11 @@ class SetupLandingView(discord.ui.View):
         embed = discord.Embed(
             title="⚡ Quick Setup - Channel Mode",
             description=(
-                "**🎮 Per-Game** (Recommended)\n"
+                "**🎮 Per-Project** (Recommended)\n"
                 "Adds `task-board`, `task-questions`, `task-leads` to the channel template "
-                "and syncs them to all existing games.\n\n"
+                "and syncs them to all existing projects.\n\n"
                 "**🌐 Global**\n"
-                "Creates a single `Tasks` category with shared channels for all games."
+                "Creates a single `Tasks` category with shared channels for all projects."
             ),
             color=discord.Color.blue()
         )
@@ -193,44 +193,44 @@ class QuickSetupModeView(discord.ui.View):
         self.guild_id = guild_id
         self.existing_config = existing_config
 
-    @discord.ui.button(label="Per-Game", style=discord.ButtonStyle.primary, emoji="🎮")
-    async def per_game_mode(self, interaction: discord.Interaction, button: discord.ui.Button):
+    @discord.ui.button(label="Per-Project", style=discord.ButtonStyle.primary, emoji="🎮")
+    async def per_project_mode(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer(ephemeral=True)
 
         await upsert_template_channel("task-board", "general", False, "Task management dashboard")
         await upsert_template_channel("task-questions", "general", False, "Questions about tasks")
         await upsert_template_channel("task-leads", "general", False, "Lead notifications")
 
-        games = await get_all_games()
+        projects = await get_all_projects()
         added_count = 0
         errors = []
 
-        if games:
+        if projects:
             template_channels = await get_all_template_channels()
             task_templates = [ch for ch in template_channels if ch.name in ("task-board", "task-questions", "task-leads")]
             groups = await get_groups_dict()
 
-            for game in games:
-                category = interaction.guild.get_channel(game.category_id)
+            for project in projects:
+                category = interaction.guild.get_channel(project.category_id)
                 if not category:
-                    errors.append(f"Category not found for {game.name}")
+                    errors.append(f"Category not found for {project.name}")
                     continue
 
-                game_channels = await get_non_custom_game_channels(game.id)
-                game_channel_names = {ch.name for ch in game_channels}
+                project_channels = await get_non_custom_project_channels(project.id)
+                project_channel_names = {ch.name for ch in project_channels}
 
                 for template_ch in task_templates:
-                    if template_ch.name not in game_channel_names:
+                    if template_ch.name not in project_channel_names:
                         emoji = groups.get(template_ch.group_name, "")
-                        channel_name = format_channel_name(emoji, game.acronym, template_ch.name)
+                        channel_name = format_channel_name(emoji, project.acronym, template_ch.name)
 
                         try:
                             new_channel = await category.create_text_channel(
                                 name=channel_name,
                                 topic=template_ch.description
                             )
-                            await add_game_channel(
-                                game_id=game.id,
+                            await add_project_channel(
+                                project_id=project.id,
                                 channel_id=new_channel.id,
                                 name=template_ch.name,
                                 group_name=template_ch.group_name,
@@ -242,12 +242,12 @@ class QuickSetupModeView(discord.ui.View):
                             errors.append(f"Failed to create {channel_name}: {e}")
 
         config = self.existing_config.copy() if self.existing_config else DEFAULT_CONFIG.copy()
-        config['channel_mode'] = 'per_game'
+        config['channel_mode'] = 'per_project'
         config['board_channel_template'] = 'task-board'
         config['questions_channel_template'] = 'task-questions'
         config['leads_channel_template'] = 'task-leads'
 
-        sync_msg = f"Added {added_count} channels to {len(games)} game(s)." if games else "No existing games to sync."
+        sync_msg = f"Added {added_count} channels to {len(projects)} project(s)." if projects else "No existing projects to sync."
         if errors:
             sync_msg += f"\n⚠️ {len(errors)} error(s)"
 
@@ -340,16 +340,16 @@ class SetupWizardView(discord.ui.View):
                 description=(
                     "**Channel Mode**\n\n"
                     "How should task channels be organized?\n\n"
-                    "\U0001f3ae **Per-Game** (Recommended): Each game gets its own task board, "
+                    "\U0001f3ae **Per-Project** (Recommended): Each project gets its own task board, "
                     "questions, and leads channels.\n\n"
-                    "\U0001f310 **Global**: One set of channels shared across all games."
+                    "\U0001f310 **Global**: One set of channels shared across all projects."
                 ),
                 color=discord.Color.blue()
             )
             self.add_item(ChannelModeSelect())
 
         elif self.step == 1:
-            if self.config['channel_mode'] == 'per_game':
+            if self.config['channel_mode'] == 'per_project':
                 embed = discord.Embed(
                     title="\U0001f527 Task System Setup - Step 2/4",
                     description="**Task Board Channel**\n\nSelect which template channel will be used for task boards.",
@@ -365,7 +365,7 @@ class SetupWizardView(discord.ui.View):
                 self.add_item(GlobalChannelSelect('global_board_channel_id', 'task board'))
 
         elif self.step == 2:
-            if self.config['channel_mode'] == 'per_game':
+            if self.config['channel_mode'] == 'per_project':
                 embed = discord.Embed(
                     title="\U0001f527 Task System Setup - Step 3/4",
                     description="**Questions Channel**\n\nSelect template channel for questions.",
@@ -381,7 +381,7 @@ class SetupWizardView(discord.ui.View):
                 self.add_item(GlobalChannelSelect('global_questions_channel_id', 'questions'))
 
         elif self.step == 3:
-            if self.config['channel_mode'] == 'per_game':
+            if self.config['channel_mode'] == 'per_project':
                 embed = discord.Embed(
                     title="\U0001f527 Task System Setup - Step 3/4 (continued)",
                     description="**Leads Channel**\n\nSelect template channel for lead notifications.",
@@ -429,10 +429,10 @@ class SetupWizardView(discord.ui.View):
 
     def _create_summary_embed(self) -> discord.Embed:
         embed = discord.Embed(title="\U0001f527 Task System Setup - Summary", description="Review your configuration.", color=discord.Color.green())
-        mode = "Per-Game" if self.config['channel_mode'] == 'per_game' else "Global"
+        mode = "Per-Project" if self.config['channel_mode'] == 'per_project' else "Global"
         embed.add_field(name="Channel Mode", value=mode, inline=True)
 
-        if self.config['channel_mode'] == 'per_game':
+        if self.config['channel_mode'] == 'per_project':
             embed.add_field(name="Board Template", value=f"`{self.config['board_channel_template']}`", inline=True)
             embed.add_field(name="Questions Template", value=f"`{self.config['questions_channel_template']}`", inline=True)
             embed.add_field(name="Leads Template", value=f"`{self.config['leads_channel_template']}`", inline=True)
@@ -554,10 +554,10 @@ class AdminCog(commands.Cog):
             cfg = DEFAULT_CONFIG
 
         embed = discord.Embed(title="\u2699\ufe0f Server Configuration", color=discord.Color.blue())
-        mode = "Per-Game" if cfg.get('channel_mode') == 'per_game' else "Global"
+        mode = "Per-Project" if cfg.get('channel_mode') == 'per_project' else "Global"
         embed.add_field(name="Channel Mode", value=mode, inline=True)
 
-        if cfg.get('channel_mode') == 'per_game':
+        if cfg.get('channel_mode') == 'per_project':
             embed.add_field(
                 name="Templates",
                 value=f"Board: `{cfg.get('board_channel_template', 'tasks')}`\nQuestions: `{cfg.get('questions_channel_template', 'questions')}`\nLeads: `{cfg.get('leads_channel_template', 'leads')}`",

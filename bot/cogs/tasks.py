@@ -8,12 +8,12 @@ from typing import Optional, List
 
 from ..config import GUILD_ID
 from ..database import (
-    get_all_games,
-    get_game_by_acronym,
+    get_all_projects,
+    get_project_by_acronym,
     create_task,
     get_task,
     get_task_by_thread_id,
-    get_tasks_by_game,
+    get_tasks_by_project,
     get_tasks_by_assignee,
     get_tasks_by_status,
     get_tasks_due_soon,
@@ -153,7 +153,7 @@ class AddMemberModal(discord.ui.Modal, title='Add Team Member'):
             if thread:
                 await thread.send(f"{member.mention} You have been added to this task!")
 
-        await self.cog.update_dashboard(task.game_acronym, interaction.client)
+        await self.cog.update_dashboard(task.project_acronym, interaction.client)
         await interaction.response.send_message(f"Added {member.mention} to the team.", ephemeral=True)
 
 
@@ -241,7 +241,7 @@ class RemoveMemberSelect(discord.ui.Select):
         await add_task_history(self.task_id, interaction.user.id, 'remove_assignee', str(user_id), None)
         await self.cog.update_control_panel(interaction, task)
         await self.cog.update_header_message(interaction, task)
-        await self.cog.update_dashboard(task.game_acronym, interaction.client)
+        await self.cog.update_dashboard(task.project_acronym, interaction.client)
 
         member = interaction.guild.get_member(user_id)
         name = member.mention if member else f"User {user_id}"
@@ -344,7 +344,7 @@ class HeaderView(discord.ui.View):
         task.status = 'cancelled'
         await self.cog.update_control_panel(interaction, task)
         await self.cog.update_header_message(interaction, task)
-        await self.cog.update_dashboard(task.game_acronym, interaction.client)
+        await self.cog.update_dashboard(task.project_acronym, interaction.client)
 
         # Archive thread
         if task.thread_id:
@@ -385,7 +385,7 @@ class PrioritySelectView(discord.ui.View):
         task.priority = new_priority
         await self.cog.update_control_panel(interaction, task)
         await self.cog.update_header_message(interaction, task)
-        await self.cog.update_dashboard(task.game_acronym, interaction.client)
+        await self.cog.update_dashboard(task.project_acronym, interaction.client)
 
         await interaction.response.send_message(f"Priority updated to: {new_priority}", ephemeral=True)
 
@@ -479,7 +479,7 @@ class TaskView(discord.ui.View):
         
         task.status = 'progress'
         await self.cog.update_control_panel(interaction, task)
-        await self.cog.update_dashboard(task.game_acronym, interaction.client)
+        await self.cog.update_dashboard(task.project_acronym, interaction.client)
         await interaction.response.send_message("Task started!", ephemeral=True)
 
     @discord.ui.button(label='Pause', style=discord.ButtonStyle.secondary, emoji='\u23f8\ufe0f', custom_id='task_pause')
@@ -497,7 +497,7 @@ class TaskView(discord.ui.View):
 
         task.status = 'todo'
         await self.cog.update_control_panel(interaction, task)
-        await self.cog.update_dashboard(task.game_acronym, interaction.client)
+        await self.cog.update_dashboard(task.project_acronym, interaction.client)
         await interaction.response.send_message("Task paused.", ephemeral=True)
 
     @discord.ui.button(label='Update ETA', style=discord.ButtonStyle.primary, emoji='\U0001f4c5', custom_id='task_eta')
@@ -516,11 +516,11 @@ class TaskView(discord.ui.View):
         task = await get_task(self.task_id)
         
         # Find leads channel for this game
-        game = await get_game_by_acronym(task.game_acronym)
+        game = await get_project_by_acronym(task.project_acronym)
         if game:
             guild = interaction.guild
             leads_channel = discord.utils.find(
-                lambda c: 'lead' in c.name.lower() and task.game_acronym.lower() in c.name.lower(),
+                lambda c: 'lead' in c.name.lower() and task.project_acronym.lower() in c.name.lower(),
                 guild.text_channels
             )
             if leads_channel:
@@ -553,14 +553,14 @@ class TaskView(discord.ui.View):
         task.status = 'review'
         await self.cog.update_control_panel(interaction, task)
         await self.cog.update_header_message(interaction, task)
-        await self.cog.update_dashboard(task.game_acronym, interaction.client)
+        await self.cog.update_dashboard(task.project_acronym, interaction.client)
 
         # Notify leads
-        game = await get_game_by_acronym(task.game_acronym)
+        game = await get_project_by_acronym(task.project_acronym)
         if game:
             guild = interaction.guild
             leads_channel = discord.utils.find(
-                lambda c: 'lead' in c.name.lower() and task.game_acronym.lower() in c.name.lower(),
+                lambda c: 'lead' in c.name.lower() and task.project_acronym.lower() in c.name.lower(),
                 guild.text_channels
             )
             if leads_channel:
@@ -649,7 +649,7 @@ class TaskView(discord.ui.View):
         task.status = 'done'
         await self.cog.update_control_panel(interaction, task)
         await self.cog.update_header_message(interaction, task)
-        await self.cog.update_dashboard(task.game_acronym, interaction.client)
+        await self.cog.update_dashboard(task.project_acronym, interaction.client)
 
         thread = interaction.channel
         if isinstance(thread, discord.Thread):
@@ -697,7 +697,7 @@ class TasksCog(commands.Cog):
             name="Task Management (Admin)",
             value=(
                 "`/task create` - Create a new task with thread\n"
-                "`/task board <game>` - Show/refresh task dashboard\n"
+                "`/task board <project>` - Show/refresh task dashboard\n"
                 "`/task import <file>` - Bulk import from JSON/XML\n"
                 "`/task close [id]` - Close task (run in thread or specify ID)"
             ),
@@ -813,7 +813,7 @@ class TasksCog(commands.Cog):
         additional_assignees="Additional team members (comma-separated user IDs)",
         priority="Task priority",
         deadline="Deadline (YYYY-MM-DD)",
-        game="Game acronym (auto-detected from channel if not provided)"
+        project="Project acronym (auto-detected from channel if not provided)"
     )
     @app_commands.choices(priority=[
         app_commands.Choice(name="Critical", value="Critical"),
@@ -832,7 +832,7 @@ class TasksCog(commands.Cog):
         additional_assignees: str = None,
         priority: str = None,
         deadline: str = None,
-        game: str = None
+        project: str = None
     ):
         await interaction.response.defer()
 
@@ -845,25 +845,25 @@ class TasksCog(commands.Cog):
                 ephemeral=True
             )
 
-        if game:
-            game_obj = await get_game_by_acronym(game)
-            if not game_obj:
-                await interaction.followup.send(f"Game `{game}` not found.")
+        if project:
+            project_obj = await get_project_by_acronym(project)
+            if not project_obj:
+                await interaction.followup.send(f"Project `{project}` not found.")
                 return
-            game_acronym = game_obj.acronym
+            project_acronym = project_obj.acronym
         else:
-            games = await get_all_games()
-            game_acronym = None
-            for g in games:
-                if g.acronym.lower() in target_channel.name.lower():
-                    game_acronym = g.acronym
+            projects = await get_all_projects()
+            project_acronym = None
+            for p in projects:
+                if p.acronym.lower() in target_channel.name.lower():
+                    project_acronym = p.acronym
                     break
-            if not game_acronym:
-                await interaction.followup.send("Could not detect game. Please specify with `game` parameter.")
+            if not project_acronym:
+                await interaction.followup.send("Could not detect project. Please specify with `project` parameter.")
                 return
 
         task = await create_task(
-            game_acronym=game_acronym,
+            project_acronym=project_acronym,
             title=title,
             description=description,
             assignee_id=assignee.id,
@@ -888,16 +888,16 @@ class TasksCog(commands.Cog):
                 except ValueError:
                     pass
 
-        game_obj = await get_game_by_acronym(game_acronym)
-        game_name = game_obj.name if game_obj else game_acronym
+        project_obj = await get_project_by_acronym(project_acronym)
+        project_name = project_obj.name if project_obj else project_acronym
 
-        header_embed = self.create_header_embed(task, all_assignees, game_name)
+        header_embed = self.create_header_embed(task, all_assignees, project_name)
         header_view = HeaderView(task.id, self)
         header_msg = await target_channel.send(embed=header_embed, view=header_view)
 
         thread = await header_msg.create_thread(name=f"Task: {title[:50]}")
 
-        control_embed = self.create_control_embed(task, all_assignees, game_name)
+        control_embed = self.create_control_embed(task, all_assignees, project_name)
         view = TaskView(task.id, self)
         control_msg = await thread.send(embed=control_embed, view=view)
 
@@ -907,13 +907,13 @@ class TasksCog(commands.Cog):
         task.thread_id = thread.id
         task.header_message_id = header_msg.id
 
-        header_embed = self.create_header_embed(task, all_assignees, game_name)
+        header_embed = self.create_header_embed(task, all_assignees, project_name)
         await header_msg.edit(embed=header_embed, view=header_view)
 
         mentions = ' '.join(m.mention for m in all_assignees)
         await thread.send(f"{mentions} You have been assigned this task!")
 
-        await self.update_dashboard(game_acronym, self.bot)
+        await self.update_dashboard(project_acronym, self.bot)
 
         assignee_list = ', '.join(m.mention for m in all_assignees)
         await interaction.followup.send(
@@ -942,7 +942,7 @@ class TasksCog(commands.Cog):
         
         return ROLE_TASK_STYLE['default']
 
-    def create_control_embed(self, task: Task, assignees=None, game_name: str = None) -> discord.Embed:
+    def create_control_embed(self, task: Task, assignees=None, project_name: str = None) -> discord.Embed:
         status = task.status or 'todo'
         role_style = self._get_role_style(assignees)
         
@@ -972,10 +972,10 @@ class TasksCog(commands.Cog):
             inline=True
         )
         
-        if game_name:
-            embed.add_field(name="Project", value=f"\U0001f3ae {game_name}", inline=True)
-        elif task.game_acronym:
-            embed.add_field(name="Project", value=f"\U0001f3ae {task.game_acronym}", inline=True)
+        if project_name:
+            embed.add_field(name="Project", value=f"\U0001f3ae {project_name}", inline=True)
+        elif task.project_acronym:
+            embed.add_field(name="Project", value=f"\U0001f3ae {task.project_acronym}", inline=True)
         
         if task.priority:
             priority_emoji = PRIORITY_EMOJI.get(task.priority, '')
@@ -1011,9 +1011,9 @@ class TasksCog(commands.Cog):
                 assignees_data = await get_task_assignees(task.id)
                 assignees = [interaction.guild.get_member(a.user_id) for a in assignees_data]
                 assignees = [m for m in assignees if m]
-                game_obj = await get_game_by_acronym(task.game_acronym)
-                game_name = game_obj.name if game_obj else None
-                embed = self.create_control_embed(task, assignees if assignees else None, game_name)
+                project_obj = await get_project_by_acronym(task.project_acronym)
+                project_name = project_obj.name if project_obj else None
+                embed = self.create_control_embed(task, assignees if assignees else None, project_name)
                 view = TaskView(task.id, self) if task.status not in ('done', 'cancelled') else None
                 await msg.edit(embed=embed, view=view)
         except discord.NotFound:
@@ -1021,7 +1021,7 @@ class TasksCog(commands.Cog):
         except discord.HTTPException:
             pass
 
-    def create_header_embed(self, task: Task, assignees=None, game_name: str = None) -> discord.Embed:
+    def create_header_embed(self, task: Task, assignees=None, project_name: str = None) -> discord.Embed:
         status = task.status or 'todo'
         role_style = self._get_role_style(assignees)
         
@@ -1081,12 +1081,12 @@ class TasksCog(commands.Cog):
     async def task_board(self, interaction: discord.Interaction, game: str, refresh: bool = False):
         await interaction.response.defer()
 
-        game_obj = await get_game_by_acronym(game)
+        game_obj = await get_project_by_acronym(game)
         if not game_obj:
             await interaction.followup.send(f"Game `{game}` not found.")
             return
 
-        tasks = await get_tasks_by_game(game)
+        tasks = await get_tasks_by_project(game)
 
         # Group by status
         by_status = {
@@ -1162,7 +1162,7 @@ class TasksCog(commands.Cog):
         """Set up or update the task board channel for a game."""
         await interaction.response.defer()
 
-        game_obj = await get_game_by_acronym(game)
+        game_obj = await get_project_by_acronym(game)
         if not game_obj:
             await interaction.followup.send(f"Game `{game}` not found.")
             return
@@ -1187,7 +1187,7 @@ class TasksCog(commands.Cog):
                 pass
 
         # Get tasks for this game
-        tasks = await get_tasks_by_game(game)
+        tasks = await get_tasks_by_project(game)
 
         # Group by status
         by_status = {
@@ -1249,7 +1249,7 @@ class TasksCog(commands.Cog):
         if not channel:
             return
 
-        tasks = await get_tasks_by_game(game_acronym)
+        tasks = await get_tasks_by_project(game_acronym)
 
         # Group by status
         by_status = {
@@ -1322,7 +1322,7 @@ class TasksCog(commands.Cog):
             deadline_str = f"\nDeadline: {str(task.deadline)[:10]}" if task.deadline else ""
             
             embed.add_field(
-                name=f"{task.title} [{task.game_acronym}]",
+                name=f"{task.title} [{task.project_acronym}]",
                 value=f"Status: {status_str}{deadline_str}\n{thread_link}",
                 inline=False
             )
@@ -1342,7 +1342,7 @@ class TasksCog(commands.Cog):
             await interaction.followup.send(f"Task #{task_id} not found.")
             return
 
-        game_acronym = task.game_acronym
+        game_acronym = task.project_acronym
 
         # Delete thread if exists
         if task.thread_id:
@@ -1456,7 +1456,7 @@ class TasksCog(commands.Cog):
         task.status = 'done'
         await self.update_control_panel(interaction, task)
         await self.update_header_message(interaction, task)
-        await self.update_dashboard(task.game_acronym, self.bot)
+        await self.update_dashboard(task.project_acronym, self.bot)
 
         if task.thread_id:
             thread = interaction.guild.get_channel(task.thread_id)
@@ -1468,21 +1468,21 @@ class TasksCog(commands.Cog):
 
         await interaction.followup.send(f"Task #{task.id} ({task.title}) closed!")
 
-    @task_group.command(name="manage", description="List all tasks for a game with management options")
-    @app_commands.describe(game="Game acronym")
+    @task_group.command(name="manage", description="List all tasks for a project with management options")
+    @app_commands.describe(game="Project acronym")
     @app_commands.checks.has_permissions(administrator=True)
     async def task_manage(self, interaction: discord.Interaction, game: str):
         await interaction.response.defer(ephemeral=True)
 
-        game_obj = await get_game_by_acronym(game)
-        if not game_obj:
-            await interaction.followup.send(f"Game `{game}` not found.")
+        project_obj = await get_project_by_acronym(game)
+        if not project_obj:
+            await interaction.followup.send(f"Project `{game}` not found.")
             return
 
-        tasks = await get_tasks_by_game(game)
+        tasks = await get_tasks_by_project(game)
 
         if not tasks:
-            await interaction.followup.send(f"No tasks for {game_obj.name}.")
+            await interaction.followup.send(f"No tasks for {project_obj.name}.")
             return
 
         # Create embed with all tasks
@@ -1523,7 +1523,7 @@ class TasksCog(commands.Cog):
 
     @task_manage.autocomplete("game")
     async def task_manage_autocomplete(self, interaction: discord.Interaction, current: str):
-        games = await get_all_games()
+        games = await get_all_projects()
         return [
             app_commands.Choice(name=f"{g.acronym} - {g.name}", value=g.acronym)
             for g in games
@@ -1606,7 +1606,7 @@ class TasksCog(commands.Cog):
                     continue
 
                 # Detect game from channel
-                games = await get_all_games()
+                games = await get_all_projects()
                 game_acronym = None
                 for g in games:
                     if g.acronym.lower() in channel.name.lower():
@@ -1629,7 +1629,7 @@ class TasksCog(commands.Cog):
                 )
 
                 # Get game name for embed
-                game_obj = await get_game_by_acronym(game_acronym)
+                game_obj = await get_project_by_acronym(game_acronym)
                 game_name = game_obj.name if game_obj else game_acronym
 
                 # Create header message with detailed embed and buttons
@@ -1667,7 +1667,7 @@ class TasksCog(commands.Cog):
                 # Update task object and refresh header with thread link
                 task.thread_id = thread.id
                 task.header_message_id = header_msg.id
-                header_embed = self.create_header_embed(task, member, game_name)
+                header_embed = self.create_header_embed(task, member, project_name)
                 await header_msg.edit(embed=header_embed, view=header_view)
 
                 # Notify assignee
@@ -1679,7 +1679,7 @@ class TasksCog(commands.Cog):
                 errors.append(f"Task {i+1}: {str(e)}")
 
         # Update dashboards
-        games = await get_all_games()
+        games = await get_all_projects()
         for g in games:
             await self.update_dashboard(g.acronym, self.bot)
 
@@ -1766,12 +1766,12 @@ class TasksCog(commands.Cog):
     @task_new.autocomplete("game")
     @task_board.autocomplete("game")
     @task_setup.autocomplete("game")
-    async def game_autocomplete(self, interaction: discord.Interaction, current: str):
-        games = await get_all_games()
+    async def project_autocomplete(self, interaction: discord.Interaction, current: str):
+        projects = await get_all_projects()
         return [
-            app_commands.Choice(name=f"{g.acronym} - {g.name}", value=g.acronym)
-            for g in games
-            if current.lower() in g.acronym.lower() or current.lower() in g.name.lower()
+            app_commands.Choice(name=f"{p.acronym} - {p.name}", value=p.acronym)
+            for p in projects
+            if current.lower() in p.acronym.lower() or current.lower() in p.name.lower()
         ][:25]
 
 
