@@ -36,6 +36,10 @@ DEFAULT_CONFIG = {
     'lead_role_ids': [],
     'approval_mode': 'auto',
     'approval_threshold': None,
+    'reminder_interval_hours': 1,
+    'deadline_warning_hours': 24,
+    'stagnant_days': 3,
+    'reminders_enabled': True,
 }
 
 
@@ -678,6 +682,81 @@ class AdminCog(commands.Cog):
             color=discord.Color.blue()
         )
         await interaction.followup.send(embed=embed, view=view)
+
+    @admin_group.command(name="config", description="Configure reminder and notification settings")
+    @app_commands.describe(
+        reminders_enabled="Enable/disable automatic reminders",
+        reminder_interval="Hours between reminder checks (1-24)",
+        deadline_warning="Hours before deadline to warn (1-72)",
+        stagnant_days="Days of inactivity before stagnant reminder (1-14)"
+    )
+    @app_commands.checks.has_permissions(administrator=True)
+    async def admin_config(
+        self,
+        interaction: discord.Interaction,
+        reminders_enabled: bool = None,
+        reminder_interval: app_commands.Range[int, 1, 24] = None,
+        deadline_warning: app_commands.Range[int, 1, 72] = None,
+        stagnant_days: app_commands.Range[int, 1, 14] = None
+    ):
+        server_config = await get_server_config(interaction.guild.id)
+        if server_config and server_config.config_json:
+            try:
+                cfg = json.loads(server_config.config_json) if isinstance(server_config.config_json, str) else server_config.config_json
+            except json.JSONDecodeError:
+                cfg = DEFAULT_CONFIG.copy()
+        else:
+            cfg = DEFAULT_CONFIG.copy()
+
+        updated = []
+        if reminders_enabled is not None:
+            cfg['reminders_enabled'] = reminders_enabled
+            updated.append(f"Reminders: {'Enabled' if reminders_enabled else 'Disabled'}")
+        if reminder_interval is not None:
+            cfg['reminder_interval_hours'] = reminder_interval
+            updated.append(f"Reminder interval: {reminder_interval}h")
+        if deadline_warning is not None:
+            cfg['deadline_warning_hours'] = deadline_warning
+            updated.append(f"Deadline warning: {deadline_warning}h before")
+        if stagnant_days is not None:
+            cfg['stagnant_days'] = stagnant_days
+            updated.append(f"Stagnant threshold: {stagnant_days} days")
+
+        if updated:
+            await upsert_server_config(interaction.guild.id, json.dumps(cfg))
+            embed = discord.Embed(
+                title="Configuration Updated",
+                description="\n".join(updated),
+                color=discord.Color.green()
+            )
+        else:
+            embed = discord.Embed(
+                title="Current Configuration",
+                color=discord.Color.blue()
+            )
+            embed.add_field(
+                name="Reminders",
+                value="Enabled" if cfg.get('reminders_enabled', True) else "Disabled",
+                inline=True
+            )
+            embed.add_field(
+                name="Reminder Interval",
+                value=f"{cfg.get('reminder_interval_hours', 1)}h",
+                inline=True
+            )
+            embed.add_field(
+                name="Deadline Warning",
+                value=f"{cfg.get('deadline_warning_hours', 24)}h before",
+                inline=True
+            )
+            embed.add_field(
+                name="Stagnant Threshold",
+                value=f"{cfg.get('stagnant_days', 3)} days",
+                inline=True
+            )
+            embed.set_footer(text="Use parameters to update: /admin config reminders_enabled:True reminder_interval:2")
+
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
 class SyncCategorySelectView(discord.ui.View):

@@ -1113,6 +1113,11 @@ class TasksCog(commands.Cog):
 
         try:
             thread = interaction.guild.get_channel(task.thread_id)
+            if not thread:
+                try:
+                    thread = await interaction.guild.fetch_channel(task.thread_id)
+                except discord.NotFound:
+                    return
             if thread:
                 msg = await thread.fetch_message(task.control_message_id)
                 assignees_data = await get_task_assignees(task.id)
@@ -1810,7 +1815,21 @@ class TasksCog(commands.Cog):
         if not guild:
             return
 
-        due_soon = await get_tasks_due_soon(24)
+        config = await get_server_config(int(GUILD_ID))
+        cfg = {}
+        if config and config.config_json:
+            try:
+                cfg = json.loads(config.config_json) if isinstance(config.config_json, str) else config.config_json
+            except json.JSONDecodeError:
+                pass
+
+        if not cfg.get('reminders_enabled', True):
+            return
+
+        deadline_hours = cfg.get('deadline_warning_hours', 24)
+        stagnant_days = cfg.get('stagnant_days', 3)
+
+        due_soon = await get_tasks_due_soon(deadline_hours)
         for task in due_soon:
             if task.thread_id:
                 thread = guild.get_channel(task.thread_id)
@@ -1818,11 +1837,11 @@ class TasksCog(commands.Cog):
                     try:
                         assignees = await get_task_assignees(task.id)
                         mentions = ' '.join(f"<@{a.user_id}>" for a in assignees) if assignees else f"<@{task.assignee_id}>"
-                        await thread.send(f"\u26a0\ufe0f {mentions} This task is due within 24 hours!")
+                        await thread.send(f"\u26a0\ufe0f {mentions} This task is due within {deadline_hours} hours!")
                     except discord.HTTPException:
                         pass
 
-        stagnant = await get_stagnant_tasks(3)
+        stagnant = await get_stagnant_tasks(stagnant_days)
         for task in stagnant:
             if task.thread_id:
                 thread = guild.get_channel(task.thread_id)
